@@ -1,5 +1,5 @@
-appId: com.electron.app
-productName: screen-memory
+appId: com.screenmemory.app
+productName: ScreenMemory
 directories:
   buildResources: build
 files:
@@ -11,32 +11,12 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
   - resources/**
-win:
-  executableName: screen-memory
-nsis:
-  artifactName: ${name}-${version}-setup.${ext}
-  shortcutName: ${productName}
-  uninstallDisplayName: ${productName}
-  createDesktopShortcut: always
+  - node_modules/better-sqlite3/**
 mac:
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
-    - NSCameraUsageDescription: Application requests access to the device's camera.
-    - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
-    - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
-    - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+    NSScreenCaptureUsageDescription: ScreenMemory needs screen recording access to capture screenshots of your desktop.
   notarize: false
-dmg:
-  artifactName: ${name}-${version}.${ext}
-linux:
-  target:
-    - AppImage
-    - snap
-    - deb
-  maintainer: electronjs.org
-  category: Utility
-appImage:
-  artifactName: ${name}-${version}.${ext}
 npmRebuild: false
 publish:
   provider: generic
