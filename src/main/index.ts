@@ -169,9 +169,9 @@ async function checkScreenRecordingPermission(): Promise<boolean> {
   const result = await dialog.showMessageBox({
     type: 'warning',
     title: 'Screen Recording Permission Required',
-    message: 'ScreenMemory needs screen recording permission to capture screenshots.',
+    message: 'Screen Memory needs screen recording permission to capture screenshots.',
     detail:
-      'Please go to System Settings > Privacy & Security > Screen Recording and enable ScreenMemory.',
+      'Please go to System Settings > Privacy & Security > Screen Recording and enable Screen Memory.',
     buttons: ['Open System Settings', 'Quit'],
     defaultId: 0
   })
@@ -186,6 +186,79 @@ async function checkScreenRecordingPermission(): Promise<boolean> {
   return false
 }
 
+function createApplicationMenu(): void {
+  const isMac = process.platform === 'darwin'
+  const template: Electron.MenuItemConstructorOptions[] = [
+    ...(isMac
+      ? [
+          {
+            label: app.name,
+            submenu: [
+              { role: 'about' as const },
+              { type: 'separator' as const },
+              { role: 'services' as const },
+              { type: 'separator' as const },
+              { role: 'hide' as const },
+              { role: 'hideOthers' as const },
+              { role: 'unhide' as const },
+              { type: 'separator' as const },
+              { role: 'quit' as const }
+            ]
+          }
+        ]
+      : []),
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'Open Timeline',
+          accelerator: 'CmdOrCtrl+O',
+          click: () => toggleTimelineWindow()
+        },
+        { type: 'separator' },
+        { role: 'close' }
+      ]
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' }
+      ]
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
+      ]
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'zoom' },
+        ...(isMac ? [{ type: 'separator' as const }, { role: 'front' as const }] : [])
+      ]
+    }
+  ]
+
+  const menu = Menu.buildFromTemplate(template)
+  Menu.setApplicationMenu(menu)
+}
+
 app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.screenmemory')
 
@@ -193,8 +266,8 @@ app.whenReady().then(async () => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // Hide dock icon — menubar-only app
-  app.dock?.hide()
+  // Set up application menu
+  createApplicationMenu()
 
   // Register custom protocol before any window loads
   registerProtocol()
@@ -234,7 +307,7 @@ app.whenReady().then(async () => {
 
   // Create tray
   tray = new Tray(createTrayIcon(false))
-  tray.setToolTip('ScreenMemory')
+  tray.setToolTip('Screen Memory')
   tray.on('click', () => toggleTimelineWindow())
   updateTrayMenu()
 
@@ -247,7 +320,11 @@ app.whenReady().then(async () => {
 })
 
 app.on('window-all-closed', () => {
-  // Don't quit on window close — we're a menubar app
+  // Don't quit on window close — app stays running for tray + capture
+})
+
+app.on('activate', () => {
+  toggleTimelineWindow()
 })
 
 app.on('before-quit', () => {

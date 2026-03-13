@@ -1,5 +1,5 @@
 appId: com.screenmemory.app
-productName: ScreenMemory
+productName: Screen Memory
 directories:
   buildResources: build
 files:
@@ -15,7 +15,7 @@ asarUnpack:
 mac:
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
-    NSScreenCaptureUsageDescription: ScreenMemory needs screen recording access to capture screenshots of your desktop.
+    NSScreenCaptureUsageDescription: Screen Memory needs screen recording access to capture screenshots of your desktop.
   notarize: false
 npmRebuild: false
 publish:

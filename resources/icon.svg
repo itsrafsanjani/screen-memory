@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Variation D: Deep forest green to mint -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="512" x2="512" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1A3C34" />
+      <stop offset="50%" stop-color="#2D6A5A" />
+      <stop offset="100%" stop-color="#6ECFB5" />
+    </linearGradient>
+    <radialGradient id="sheen" cx="32%" cy="18%" r="60%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.1" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="bottomdim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#000000" stop-opacity="0" />
+      <stop offset="100%" stop-color="#0D1F1A" stop-opacity="0.18" />
+    </linearGradient>
+  </defs>
+
+  <rect x="16" y="16" width="480" height="480" rx="96" fill="url(#bg)" />
+  <rect x="16" y="16" width="480" height="480" rx="96" fill="url(#sheen)" />
+  <rect x="16" y="256" width="480" height="240" rx="96" fill="url(#bottomdim)" />
+
+  <rect x="148" y="126" width="216" height="148" rx="12" fill="rgba(255,255,255,0.09)" />
+  <rect x="132" y="144" width="248" height="170" rx="14" fill="rgba(255,255,255,0.16)" />
+  <rect x="116" y="162" width="280" height="192" rx="16" fill="rgba(255,255,255,0.11)" stroke="#FFFFFF" stroke-width="5" stroke-opacity="0.8" />
+
+  <rect x="144" y="194" width="120" height="6" rx="3" fill="rgba(255,255,255,0.35)" />
+  <rect x="144" y="214" width="80" height="6" rx="3" fill="rgba(255,255,255,0.2)" />
+
+  <line x1="216" y1="368" x2="296" y2="368" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" stroke-opacity="0.45" />
+</svg>
