@@ -1,0 +1,5 @@
+- Use `pnpm` as package manager.
+- Run these commands after you finish your work to verify the code is formatted and linted:
+  - `pnpm run format`
+  - `pnpm run lint`
+  - `pnpm run typecheck`
