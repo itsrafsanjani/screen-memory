@@ -63,9 +63,9 @@ export function TimelineTrack({
   const editorData: TimelineRow[] = useMemo(() => {
     if (screenshots.length === 0) return [{ id: 'activity', actions: [] }]
 
-    const uniqueTimestamps = [
-      ...new Map(screenshots.map((s) => [s.timestamp, s])).values()
-    ].sort((a, b) => a.timestamp - b.timestamp)
+    const uniqueTimestamps = [...new Map(screenshots.map((s) => [s.timestamp, s])).values()].sort(
+      (a, b) => a.timestamp - b.timestamp
+    )
 
     const actions: TimelineAction[] = []
     let segStart = uniqueTimestamps[0].timestamp
@@ -155,7 +155,10 @@ export function TimelineTrack({
   )
 
   const handleClickAction = useCallback(
-    (_e: React.MouseEvent, { time }: { action: TimelineAction; row: TimelineRow; time: number }) => {
+    (
+      _e: React.MouseEvent,
+      { time }: { action: TimelineAction; row: TimelineRow; time: number }
+    ) => {
       seekToTime(time)
     },
     [seekToTime]
@@ -198,7 +201,8 @@ export function TimelineTrack({
       const rect = containerRef.current.getBoundingClientRect()
       const x = e.clientX - rect.left
 
-      const scrollLeft = containerRef.current.querySelector('.timeline-editor-edit-area')?.scrollLeft ?? 0
+      const scrollLeft =
+        containerRef.current.querySelector('.timeline-editor-edit-area')?.scrollLeft ?? 0
       const pixelOffset = x - START_LEFT + scrollLeft
       const timeSec = (pixelOffset / scaleWidth) * SCALE_SEC
       const ms = timelineSecToMs(Math.max(0, timeSec), origin)
@@ -212,7 +216,12 @@ export function TimelineTrack({
   }, [onHoverTimestamp])
 
   return (
-    <div className="relative select-none" ref={containerRef} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave}>
+    <div
+      className="relative select-none"
+      ref={containerRef}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+    >
       <TimelineEditor
         ref={timelineRef}
         editorData={editorData}

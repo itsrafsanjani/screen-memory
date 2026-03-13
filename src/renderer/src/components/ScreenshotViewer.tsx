@@ -56,7 +56,11 @@ function CrossfadeImage({ src, alt }: { src: string; alt: string }): React.JSX.E
   )
 }
 
-export function ScreenshotViewer({ screenshots, currentTimestamp, hoverTimestamp }: Props): React.JSX.Element {
+export function ScreenshotViewer({
+  screenshots,
+  currentTimestamp,
+  hoverTimestamp
+}: Props): React.JSX.Element {
   const displayTimestamp = hoverTimestamp ?? currentTimestamp
 
   const displayScreenshots = useMemo(() => {
@@ -87,10 +91,7 @@ export function ScreenshotViewer({ screenshots, currentTimestamp, hoverTimestamp
         .sort((a, b) => a.display_id.localeCompare(b.display_id))
         .map((shot) => (
           <div key={shot.display_id} className="flex-1 flex items-center justify-center min-w-0">
-            <CrossfadeImage
-              src={shot.file_path}
-              alt={`Display ${shot.display_id}`}
-            />
+            <CrossfadeImage src={shot.file_path} alt={`Display ${shot.display_id}`} />
           </div>
         ))}
     </div>

@@ -73,13 +73,17 @@ export class DatabaseService {
     const start = new Date(year, month - 1, day, 0, 0, 0, 0).getTime()
     const end = new Date(year, month - 1, day, 23, 59, 59, 999).getTime()
     return this.db
-      .prepare('SELECT * FROM screenshots WHERE timestamp >= ? AND timestamp <= ? ORDER BY timestamp ASC')
+      .prepare(
+        'SELECT * FROM screenshots WHERE timestamp >= ? AND timestamp <= ? ORDER BY timestamp ASC'
+      )
       .all(start, end) as ScreenshotRow[]
   }
 
   getScreenshotsByTimeRange(start: number, end: number): ScreenshotRow[] {
     return this.db
-      .prepare('SELECT * FROM screenshots WHERE timestamp >= ? AND timestamp <= ? ORDER BY timestamp ASC')
+      .prepare(
+        'SELECT * FROM screenshots WHERE timestamp >= ? AND timestamp <= ? ORDER BY timestamp ASC'
+      )
       .all(start, end) as ScreenshotRow[]
   }
 
@@ -98,7 +102,9 @@ export class DatabaseService {
     const start = new Date(year, month - 1, day, 0, 0, 0, 0).getTime()
     const end = new Date(year, month - 1, day, 23, 59, 59, 999).getTime()
     const row = this.db
-      .prepare('SELECT MIN(timestamp) as first, MAX(timestamp) as last FROM screenshots WHERE timestamp >= ? AND timestamp <= ?')
+      .prepare(
+        'SELECT MIN(timestamp) as first, MAX(timestamp) as last FROM screenshots WHERE timestamp >= ? AND timestamp <= ?'
+      )
       .get(start, end) as { first: number | null; last: number | null }
     if (!row || row.first === null || row.last === null) return null
     return { first: row.first, last: row.last }

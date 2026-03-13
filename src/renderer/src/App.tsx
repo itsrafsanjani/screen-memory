@@ -64,18 +64,11 @@ function App(): React.JSX.Element {
         {/* Toolbar */}
         <div className="flex items-center justify-between px-4 py-2 border-b border-border">
           <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={toggleRecording}
-              className="gap-1.5 text-xs"
-            >
+            <Button variant="ghost" size="sm" onClick={toggleRecording} className="gap-1.5 text-xs">
               <span
                 className={`w-2 h-2 rounded-full ${isRecording ? 'bg-recording animate-pulse' : 'bg-muted-foreground/40'}`}
               />
-              <span className="text-muted-foreground">
-                {isRecording ? 'Recording' : 'Paused'}
-              </span>
+              <span className="text-muted-foreground">{isRecording ? 'Recording' : 'Paused'}</span>
             </Button>
           </div>
 
@@ -104,7 +97,11 @@ function App(): React.JSX.Element {
             Loading...
           </div>
         ) : (
-          <ScreenshotViewer screenshots={screenshots} currentTimestamp={currentTimestamp} hoverTimestamp={hoverTimestamp} />
+          <ScreenshotViewer
+            screenshots={screenshots}
+            currentTimestamp={currentTimestamp}
+            hoverTimestamp={hoverTimestamp}
+          />
         )}
 
         {/* Timeline */}
