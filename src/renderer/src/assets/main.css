@@ -84,37 +84,6 @@
   -webkit-app-region: no-drag;
 }
 
-/* Timeline editor theme overrides */
-.timeline-editor {
-  background: var(--secondary) !important;
-  width: 100% !important;
-}
-.timeline-editor-edit-area {
-  overflow-x: hidden !important;
-}
-.timeline-editor-time-area {
-  color: var(--muted-foreground) !important;
-}
-.timeline-editor-cursor {
-  border-left-color: var(--playhead) !important;
-}
-.timeline-editor-cursor .timeline-editor-cursor-top {
-  border-color: var(--playhead) !important;
-  background: var(--playhead) !important;
-}
-/* Hide the left-side row label area for single-row usage */
-.timeline-editor .timeline-editor-left-area {
-  display: none !important;
-}
-/* Scrollbar styling */
-.timeline-editor ::-webkit-scrollbar {
-  height: 4px;
-}
-.timeline-editor ::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 2px;
-}
-
 @layer base {
   * {
     @apply border-border outline-ring/50;

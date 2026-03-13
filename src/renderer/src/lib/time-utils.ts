@@ -71,11 +71,3 @@ export function findNearestScreenshot(
   const diffHi = Math.abs(screenshots[hi].timestamp - targetTimestamp)
   return diffLo < diffHi ? lo : hi
 }
-
-export function msToTimelineSec(timestampMs: number, originMs: number): number {
-  return (timestampMs - originMs) / 1000
-}
-
-export function timelineSecToMs(seconds: number, originMs: number): number {
-  return seconds * 1000 + originMs
-}

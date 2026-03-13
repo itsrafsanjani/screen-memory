@@ -23,8 +23,6 @@
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
-    "@xzdarcy/react-timeline-editor": "^1.0.0",
-    "@xzdarcy/timeline-engine": "^1.0.0",
     "better-sqlite3": "^12.6.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

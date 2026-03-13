@@ -33,13 +33,52 @@ function App(): React.JSX.Element {
     hasNextDate
   } = useTimeline()
 
-  const { isPlaying, speed, toggle, skipForward, skipBackward, setSpeed } = usePlayback(
-    screenshots,
-    currentTimestamp,
-    setCurrentTimestamp
-  )
+  const {
+    isPlaying,
+    speed,
+    toggle,
+    skipForward,
+    skipBackward,
+    setSpeed,
+    cycleSpeedUp,
+    cycleSpeedDown
+  } = usePlayback(screenshots, currentTimestamp, setCurrentTimestamp)
 
   const [hoverTimestamp, setHoverTimestamp] = useState<number | null>(null)
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent): void => {
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+
+      switch (e.key) {
+        case ' ':
+          e.preventDefault()
+          toggle()
+          break
+        case 'ArrowLeft':
+          e.preventDefault()
+          skipBackward()
+          break
+        case 'ArrowRight':
+          e.preventDefault()
+          skipForward()
+          break
+        case 'ArrowUp':
+          e.preventDefault()
+          cycleSpeedUp()
+          break
+        case 'ArrowDown':
+          e.preventDefault()
+          cycleSpeedDown()
+          break
+      }
+    }
+
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [toggle, skipForward, skipBackward, cycleSpeedUp, cycleSpeedDown])
   const [isRecording, setIsRecording] = useState(false)
 
   useTheme()

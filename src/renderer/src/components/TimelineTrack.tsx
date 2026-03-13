@@ -1,16 +1,8 @@
 import { useRef, useCallback, useMemo, useState, useEffect } from 'react'
-import { Timeline as TimelineEditor } from '@xzdarcy/react-timeline-editor'
-import type { TimelineState } from '@xzdarcy/react-timeline-editor'
-import type { TimelineRow, TimelineAction, TimelineEffect } from '@xzdarcy/timeline-engine'
-import '@xzdarcy/react-timeline-editor/dist/react-timeline-editor.css'
 import type { ScreenshotRecord } from '../../../types'
 import type { DayBounds } from '../../../types'
-import {
-  msToTimelineSec,
-  timelineSecToMs,
-  formatTimeShort,
-  findNearestScreenshot
-} from '../lib/time-utils'
+import { formatTimeShort, findNearestScreenshot } from '../lib/time-utils'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 interface Props {
   screenshots: ScreenshotRecord[]
@@ -20,15 +12,27 @@ interface Props {
   onHoverTimestamp?: (ts: number | null) => void
 }
 
-const effects: Record<string, TimelineEffect> = {
-  active: { id: 'active', name: 'active' },
-  idle: { id: 'idle', name: 'idle' }
+interface Segment {
+  startMs: number
+  endMs: number
+  isIdle: boolean
 }
 
-const START_LEFT = 20
-const DEFAULT_SCALE_SEC = 3600 // 1-hour ticks
-const MIN_SCALE_SEC = 300 // 5-min ticks (zoom in)
-const MAX_SCALE_SEC = 7200 // 2-hour ticks (zoom out)
+interface VisibleRange {
+  start: number
+  end: number
+}
+
+const GAP_THRESHOLD = 15000
+const MIN_VISIBLE_MS = 5 * 60 * 1000 // 5 minutes
+
+function getTickInterval(durationMs: number): number {
+  const durationHrs = durationMs / (1000 * 60 * 60)
+  if (durationHrs < 1) return 5 * 60 * 1000 // 5 min
+  if (durationHrs < 4) return 15 * 60 * 1000 // 15 min
+  if (durationHrs < 8) return 30 * 60 * 1000 // 30 min
+  return 60 * 60 * 1000 // 1 hr
+}
 
 export function TimelineTrack({
   screenshots,
@@ -37,220 +41,112 @@ export function TimelineTrack({
   onSeek,
   onHoverTimestamp
 }: Props): React.JSX.Element {
-  const timelineRef = useRef<TimelineState>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const barRef = useRef<HTMLDivElement>(null)
   const isDragging = useRef(false)
-  const [containerWidth, setContainerWidth] = useState(0)
-  const [scaleSec, setScaleSec] = useState(DEFAULT_SCALE_SEC)
+  const [hoverX, setHoverX] = useState<number | null>(null)
+  const [hoverMs, setHoverMs] = useState<number | null>(null)
 
-  // Use midnight of the day as origin for full-day view
-  const { first } = dayBounds
-  const dayStart = new Date(first)
-  dayStart.setHours(0, 0, 0, 0)
-  const origin = dayStart.getTime()
-  const totalDurationSec = 86400 // full 24-hour day
+  // Activity-based visible range with padding
+  const fullRange = useMemo<VisibleRange>(() => {
+    const duration = dayBounds.last - dayBounds.first
+    const padding = Math.max(5 * 60 * 1000, duration * 0.02)
+    return { start: dayBounds.first - padding, end: dayBounds.last + padding }
+  }, [dayBounds.first, dayBounds.last])
 
-  // Measure container width with ResizeObserver
+  const [visibleRange, setVisibleRange] = useState<VisibleRange>(fullRange)
+
+  // Reset visible range when day changes
   useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
+    setVisibleRange(fullRange)
+  }, [fullRange])
 
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setContainerWidth(entry.contentRect.width)
-      }
-    })
-    observer.observe(el)
-    setContainerWidth(el.getBoundingClientRect().width)
+  const rangeDuration = visibleRange.end - visibleRange.start
 
-    return () => observer.disconnect()
-  }, [])
+  // Build activity segments
+  const segments = useMemo<Segment[]>(() => {
+    if (screenshots.length === 0) return []
 
-  // Build activity segments, convert to TimelineRow
-  const editorData: TimelineRow[] = useMemo(() => {
-    if (screenshots.length === 0) return [{ id: 'activity', actions: [] }]
-
-    const uniqueTimestamps = [...new Map(screenshots.map((s) => [s.timestamp, s])).values()].sort(
+    const unique = [...new Map(screenshots.map((s) => [s.timestamp, s])).values()].sort(
       (a, b) => a.timestamp - b.timestamp
     )
 
-    const actions: TimelineAction[] = []
-    let segStart = uniqueTimestamps[0].timestamp
-    let segIdle = uniqueTimestamps[0].is_idle
-    const GAP_THRESHOLD = 15000
+    const segs: Segment[] = []
+    let segStart = unique[0].timestamp
+    let segIdle = unique[0].is_idle
 
-    for (let i = 1; i < uniqueTimestamps.length; i++) {
-      const s = uniqueTimestamps[i]
-      const gap = s.timestamp - uniqueTimestamps[i - 1].timestamp
+    for (let i = 1; i < unique.length; i++) {
+      const s = unique[i]
+      const gap = s.timestamp - unique[i - 1].timestamp
 
       if (gap > GAP_THRESHOLD || s.is_idle !== segIdle) {
-        actions.push({
-          id: `seg-${actions.length}`,
-          start: msToTimelineSec(segStart, origin),
-          end: msToTimelineSec(uniqueTimestamps[i - 1].timestamp, origin),
-          effectId: segIdle ? 'idle' : 'active',
-          movable: false,
-          flexible: false
-        })
+        segs.push({ startMs: segStart, endMs: unique[i - 1].timestamp, isIdle: segIdle })
         segStart = s.timestamp
         segIdle = s.is_idle
       }
     }
-    // Push last segment
-    actions.push({
-      id: `seg-${actions.length}`,
-      start: msToTimelineSec(segStart, origin),
-      end: msToTimelineSec(uniqueTimestamps[uniqueTimestamps.length - 1].timestamp, origin),
-      effectId: segIdle ? 'idle' : 'active',
-      movable: false,
-      flexible: false
-    })
+    segs.push({ startMs: segStart, endMs: unique[unique.length - 1].timestamp, isIdle: segIdle })
 
-    return [{ id: 'activity', actions }]
-  }, [screenshots, origin])
+    return segs
+  }, [screenshots])
 
-  // Dynamic scaleWidth to fill container
-  const { scaleWidth, scaleCount } = useMemo(() => {
-    const count = Math.max(1, Math.ceil(totalDurationSec / scaleSec))
-    if (containerWidth <= 0) {
-      return { scaleWidth: 120, scaleCount: count }
-    }
-    const availableWidth = containerWidth - START_LEFT
-    const sw = Math.max(20, availableWidth / count)
-    return { scaleWidth: sw, scaleCount: count }
-  }, [totalDurationSec, scaleSec, containerWidth])
+  // Compute time from mouse X position on the bar
+  const xToMs = useCallback(
+    (clientX: number): number | null => {
+      const bar = barRef.current
+      if (!bar) return null
+      const rect = bar.getBoundingClientRect()
+      const x = clientX - rect.left
+      const ratio = Math.max(0, Math.min(1, x / rect.width))
+      return visibleRange.start + ratio * rangeDuration
+    },
+    [visibleRange.start, rangeDuration]
+  )
 
-  // Sync cursor to current playback timestamp
-  useEffect(() => {
-    if (currentTimestamp !== null && timelineRef.current) {
-      const sec = msToTimelineSec(currentTimestamp, origin)
-      timelineRef.current.setTime(sec)
-      timelineRef.current.reRender()
-    }
-  }, [currentTimestamp, origin])
-
-  // Seek handler: convert timeline seconds to ms, find nearest screenshot
-  const seekToTime = useCallback(
-    (timeSec: number) => {
-      const ms = timelineSecToMs(timeSec, origin)
+  const seekToMs = useCallback(
+    (ms: number) => {
       const idx = findNearestScreenshot(screenshots, ms)
       if (idx >= 0) onSeek(screenshots[idx].timestamp)
     },
-    [origin, screenshots, onSeek]
+    [screenshots, onSeek]
   )
 
-  const handleClickTimeArea = useCallback(
-    (time: number) => {
-      seekToTime(time)
-      return true
-    },
-    [seekToTime]
-  )
-
-  const handleCursorDrag = useCallback(
-    (time: number) => {
-      seekToTime(time)
-    },
-    [seekToTime]
-  )
-
-  const handleClickRow = useCallback(
-    (_e: React.MouseEvent, { time }: { row: TimelineRow; time: number }) => {
-      seekToTime(time)
-    },
-    [seekToTime]
-  )
-
-  const handleClickAction = useCallback(
-    (
-      _e: React.MouseEvent,
-      { time }: { action: TimelineAction; row: TimelineRow; time: number }
-    ) => {
-      seekToTime(time)
-    },
-    [seekToTime]
-  )
-
-  // Custom action rendering
-  const getActionRender = useCallback((action: TimelineAction) => {
-    const isIdle = action.effectId === 'idle'
-    return (
-      <div
-        style={{
-          width: '100%',
-          height: '100%',
-          borderRadius: '2px',
-          backgroundColor: isIdle
-            ? 'oklch(0.795 0.184 86.047 / 0.4)'
-            : 'oklch(0.623 0.214 259.815 / 0.6)'
-        }}
-      />
-    )
-  }, [])
-
-  // Custom scale rendering - adaptive time labels based on zoom level
-  const getScaleRender = useCallback(
-    (scaleSeconds: number) => {
-      const ms = timelineSecToMs(scaleSeconds, origin)
-      const d = new Date(ms)
-      const h = d.getHours()
-      const h12 = h % 12 || 12
-      const ampm = h >= 12 ? 'p' : 'a'
-      const minutes = d.getMinutes()
-
-      let label: string
-      if (minutes !== 0) {
-        label = formatTimeShort(ms)
-      } else if (scaleWidth >= 50) {
-        label = `${h12} ${h >= 12 ? 'PM' : 'AM'}`
-      } else if (scaleWidth >= 30) {
-        label = `${h12}${ampm}`
-      } else {
-        // Very compact — skip odd hours to reduce clutter
-        if (h % 2 !== 0) return <span />
-        label = `${h12}${ampm}`
-      }
-
-      return (
-        <span style={{ fontSize: '10px', color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>
-          {label}
-        </span>
-      )
-    },
-    [origin, scaleWidth]
-  )
-
-  // Click-and-drag hover handling
-  const computeHoverTimestamp = useCallback(
-    (e: React.MouseEvent) => {
-      if (!containerRef.current || !onHoverTimestamp) return
-      const rect = containerRef.current.getBoundingClientRect()
-      const x = e.clientX - rect.left
-
-      const scrollLeft =
-        containerRef.current.querySelector('.timeline-editor-edit-area')?.scrollLeft ?? 0
-      const pixelOffset = x - START_LEFT + scrollLeft
-      const timeSec = (pixelOffset / scaleWidth) * scaleSec
-      const ms = timelineSecToMs(Math.max(0, timeSec), origin)
-      onHoverTimestamp(ms)
-    },
-    [scaleWidth, scaleSec, origin, onHoverTimestamp]
-  )
-
+  // Click-to-seek
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       isDragging.current = true
-      computeHoverTimestamp(e)
+      const ms = xToMs(e.clientX)
+      if (ms !== null) {
+        seekToMs(ms)
+        onHoverTimestamp?.(ms)
+      }
     },
-    [computeHoverTimestamp]
+    [xToMs, seekToMs, onHoverTimestamp]
   )
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
-      if (!isDragging.current) return
-      computeHoverTimestamp(e)
+      const bar = barRef.current
+      if (!bar) return
+      const rect = bar.getBoundingClientRect()
+      const x = e.clientX - rect.left
+
+      if (isDragging.current) {
+        const ms = xToMs(e.clientX)
+        if (ms !== null) {
+          seekToMs(ms)
+          onHoverTimestamp?.(ms)
+        }
+      } else {
+        // Hover tooltip
+        const ms = xToMs(e.clientX)
+        if (ms !== null) {
+          setHoverX(x)
+          setHoverMs(ms)
+        }
+      }
     },
-    [computeHoverTimestamp]
+    [xToMs, seekToMs, onHoverTimestamp]
   )
 
   const handleMouseUp = useCallback(() => {
@@ -260,55 +156,163 @@ export function TimelineTrack({
 
   const handleMouseLeave = useCallback(() => {
     isDragging.current = false
+    setHoverX(null)
+    setHoverMs(null)
     onHoverTimestamp?.(null)
   }, [onHoverTimestamp])
 
-  // Zoom via scroll wheel
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault()
-    setScaleSec((prev) => {
-      const delta = e.deltaY > 0 ? 1.2 : 0.8
-      return Math.round(Math.min(MAX_SCALE_SEC, Math.max(MIN_SCALE_SEC, prev * delta)))
+  // Zoom via wheel — attached imperatively to allow preventDefault
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+
+    const handler = (e: WheelEvent): void => {
+      e.preventDefault()
+      const bar = barRef.current
+      if (!bar) return
+
+      const rect = bar.getBoundingClientRect()
+      const cursorX = e.clientX - rect.left
+      const cursorRatio = Math.max(0, Math.min(1, cursorX / rect.width))
+
+      setVisibleRange((prev) => {
+        const duration = prev.end - prev.start
+        const factor = e.deltaY > 0 ? 1.2 : 1 / 1.2
+        const newDuration = Math.max(
+          MIN_VISIBLE_MS,
+          Math.min(fullRange.end - fullRange.start, duration * factor)
+        )
+
+        const cursorMs = prev.start + cursorRatio * duration
+        const newStart = cursorMs - cursorRatio * newDuration
+        const newEnd = newStart + newDuration
+
+        return { start: newStart, end: newEnd }
+      })
+    }
+
+    el.addEventListener('wheel', handler, { passive: false })
+    return () => el.removeEventListener('wheel', handler)
+  }, [fullRange.start, fullRange.end])
+
+  // Auto-follow during playback
+  useEffect(() => {
+    if (currentTimestamp === null) return
+
+    setVisibleRange((prev) => {
+      const duration = prev.end - prev.start
+      const threshold = prev.start + duration * 0.9
+      if (currentTimestamp > threshold) {
+        const shift = duration * 0.5
+        return { start: prev.start + shift, end: prev.end + shift }
+      }
+      if (currentTimestamp < prev.start) {
+        const shift = duration * 0.5
+        return { start: prev.start - shift, end: prev.end - shift }
+      }
+      return prev
     })
-  }, [])
+  }, [currentTimestamp])
+
+  // Playhead position
+  const playheadPct =
+    currentTimestamp !== null
+      ? ((currentTimestamp - visibleRange.start) / rangeDuration) * 100
+      : null
+
+  // Time ticks
+  const ticks = useMemo(() => {
+    const interval = getTickInterval(rangeDuration)
+    const firstTick = Math.ceil(visibleRange.start / interval) * interval
+    const result: { ms: number; pct: number }[] = []
+    for (let t = firstTick; t <= visibleRange.end; t += interval) {
+      const pct = ((t - visibleRange.start) / rangeDuration) * 100
+      result.push({ ms: t, pct })
+    }
+    return result
+  }, [visibleRange.start, visibleRange.end, rangeDuration])
 
   return (
-    <div
-      className="relative select-none"
-      ref={containerRef}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseLeave}
-      onWheel={handleWheel}
-    >
-      <TimelineEditor
-        ref={timelineRef}
-        editorData={editorData}
-        effects={effects}
-        scale={scaleSec}
-        scaleWidth={scaleWidth}
-        scaleSplitCount={2}
-        startLeft={START_LEFT}
-        rowHeight={28}
-        minScaleCount={scaleCount}
-        maxScaleCount={scaleCount}
-        hideCursor={false}
-        disableDrag={true}
-        dragLine={false}
-        gridSnap={false}
-        autoScroll={false}
-        autoReRender={false}
-        getActionRender={getActionRender}
-        getScaleRender={getScaleRender}
-        onClickTimeArea={handleClickTimeArea}
-        onCursorDrag={handleCursorDrag}
-        onCursorDragEnd={handleCursorDrag}
-        onClickRow={handleClickRow}
-        onClickAction={handleClickAction}
-        onChange={() => {}}
-        style={{ height: '50px', overflow: 'hidden' }}
-      />
+    <div ref={containerRef} className="px-4 select-none">
+      {/* Bar area */}
+      <div
+        ref={barRef}
+        className="relative h-7 bg-secondary rounded cursor-pointer"
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseLeave}
+      >
+        {/* Segments */}
+        {segments.map((seg, i) => {
+          const left = ((seg.startMs - visibleRange.start) / rangeDuration) * 100
+          const width = ((seg.endMs - seg.startMs) / rangeDuration) * 100
+          return (
+            <div
+              key={i}
+              className={seg.isIdle ? 'bg-idle/40' : 'bg-active/60'}
+              style={{
+                position: 'absolute',
+                top: 0,
+                bottom: 0,
+                left: `${left}%`,
+                width: `${width}%`,
+                borderRadius: '2px'
+              }}
+            />
+          )
+        })}
+
+        {/* Playhead */}
+        {playheadPct !== null && playheadPct >= 0 && playheadPct <= 100 ? (
+          <div
+            className="bg-playhead"
+            style={{
+              position: 'absolute',
+              top: 0,
+              bottom: 0,
+              left: `${playheadPct}%`,
+              width: '2px',
+              transform: 'translateX(-1px)',
+              zIndex: 10
+            }}
+          />
+        ) : null}
+
+        {/* Hover tooltip */}
+        {hoverX != null && hoverMs != null ? (
+          <Tooltip open>
+            <TooltipTrigger asChild>
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  bottom: 0,
+                  left: `${hoverX}px`,
+                  width: '1px',
+                  pointerEvents: 'none'
+                }}
+              />
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">
+              {formatTimeShort(hoverMs)}
+            </TooltipContent>
+          </Tooltip>
+        ) : null}
+      </div>
+
+      {/* Time labels */}
+      <div className="relative h-4 mt-0.5">
+        {ticks.map((t) => (
+          <span
+            key={t.ms}
+            className="absolute text-[10px] text-muted-foreground whitespace-nowrap -translate-x-1/2"
+            style={{ left: `${t.pct}%` }}
+          >
+            {formatTimeShort(t.ms)}
+          </span>
+        ))}
+      </div>
     </div>
   )
 }

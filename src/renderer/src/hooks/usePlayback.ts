@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import type { ScreenshotRecord } from '../../../types'
 import { findNearestScreenshot } from '../lib/time-utils'
 
+const SPEEDS = [1, 2, 5, 10, 30, 60]
+
 export function usePlayback(
   screenshots: ScreenshotRecord[],
   currentTimestamp: number | null,
@@ -86,6 +88,20 @@ export function usePlayback(
     if (idx >= 0) setCurrentTimestamp(screenshots[idx].timestamp)
   }, [currentTimestamp, screenshots, setCurrentTimestamp])
 
+  const cycleSpeedUp = useCallback(() => {
+    setSpeed((prev) => {
+      const idx = SPEEDS.indexOf(prev)
+      return idx < SPEEDS.length - 1 ? SPEEDS[idx + 1] : prev
+    })
+  }, [])
+
+  const cycleSpeedDown = useCallback(() => {
+    setSpeed((prev) => {
+      const idx = SPEEDS.indexOf(prev)
+      return idx > 0 ? SPEEDS[idx - 1] : prev
+    })
+  }, [])
+
   return {
     isPlaying,
     speed,
@@ -94,6 +110,8 @@ export function usePlayback(
     stop,
     toggle,
     skipForward,
-    skipBackward
+    skipBackward,
+    cycleSpeedUp,
+    cycleSpeedDown
   }
 }
