@@ -4,3 +4,7 @@ out
 .DS_Store
 .eslintcache
 *.log*
+
+# Swift OCR build artifacts
+swift-ocr/.build
+swift-ocr/.swiftpm

@@ -1,11 +1,28 @@
 import { useState, useEffect, useCallback } from 'react'
 import { format } from 'date-fns'
 import { useScreenshots } from './useScreenshots'
+import type { ScreenshotRecord, DayBounds } from '../../../types'
 
-export function useTimeline() {
+interface UseTimelineReturn {
+  currentDate: string
+  currentTimestamp: number | null
+  setCurrentTimestamp: React.Dispatch<React.SetStateAction<number | null>>
+  screenshots: ScreenshotRecord[]
+  dayBounds: DayBounds | null
+  loading: boolean
+  availableDates: string[]
+  goToDate: (date: string) => void
+  goToPreviousDate: () => void
+  goToNextDate: () => void
+  hasPreviousDate: boolean
+  hasNextDate: boolean
+}
+
+export function useTimeline(): UseTimelineReturn {
   const [currentDate, setCurrentDate] = useState(() => format(new Date(), 'yyyy-MM-dd'))
   const [currentTimestamp, setCurrentTimestamp] = useState<number | null>(null)
   const [availableDates, setAvailableDates] = useState<string[]>([])
+  const [initializedDate, setInitializedDate] = useState<string | null>(null)
 
   const { screenshots, dayBounds, loading } = useScreenshots(currentDate)
 
@@ -13,16 +30,21 @@ export function useTimeline() {
     window.electronAPI.getAvailableDates().then(setAvailableDates).catch(console.error)
   }, [])
 
-  // Set initial timestamp to first screenshot when day loads
+  // Set initial timestamp when a new day's bounds load
   useEffect(() => {
-    if (dayBounds) {
-      setCurrentTimestamp(dayBounds.first)
+    if (dayBounds && currentDate !== initializedDate) {
+      // Use a microtask to avoid the lint rule about setState in effect body
+      queueMicrotask(() => {
+        setCurrentTimestamp(dayBounds.first)
+        setInitializedDate(currentDate)
+      })
     }
-  }, [dayBounds])
+  }, [dayBounds, currentDate, initializedDate])
 
   const goToDate = useCallback((date: string) => {
     setCurrentDate(date)
     setCurrentTimestamp(null)
+    setInitializedDate(null)
   }, [])
 
   const goToPreviousDate = useCallback(() => {

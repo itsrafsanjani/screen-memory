@@ -1,5 +1,5 @@
 import { useRef, useCallback, useMemo, useState, useEffect } from 'react'
-import type { ScreenshotRecord } from '../../../types'
+import type { ScreenshotRecord, GitCommit } from '../../../types'
 import type { DayBounds } from '../../../types'
 import { formatTimeShort, findNearestScreenshot } from '../lib/time-utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -10,6 +10,7 @@ interface Props {
   currentTimestamp: number | null
   onSeek: (timestamp: number) => void
   onHoverTimestamp?: (ts: number | null) => void
+  gitCommits?: GitCommit[]
 }
 
 interface Segment {
@@ -39,7 +40,8 @@ export function TimelineTrack({
   dayBounds,
   currentTimestamp,
   onSeek,
-  onHoverTimestamp
+  onHoverTimestamp,
+  gitCommits
 }: Props): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
   const barRef = useRef<HTMLDivElement>(null)
@@ -258,6 +260,28 @@ export function TimelineTrack({
                 left: `${left}%`,
                 width: `${width}%`,
                 borderRadius: '2px'
+              }}
+            />
+          )
+        })}
+
+        {/* Git commit markers */}
+        {gitCommits?.map((commit) => {
+          const pct = ((commit.timestamp - visibleRange.start) / rangeDuration) * 100
+          if (pct < 0 || pct > 100) return null
+          return (
+            <div
+              key={commit.id}
+              className="bg-git-commit"
+              title={`${commit.repo_name}: ${commit.message}`}
+              style={{
+                position: 'absolute',
+                top: '50%',
+                left: `${pct}%`,
+                width: '6px',
+                height: '6px',
+                transform: 'translate(-3px, -50%) rotate(45deg)',
+                zIndex: 5
               }}
             />
           )

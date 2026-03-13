@@ -8,7 +8,18 @@ export function usePlayback(
   screenshots: ScreenshotRecord[],
   currentTimestamp: number | null,
   setCurrentTimestamp: (ts: number) => void
-) {
+): {
+  isPlaying: boolean
+  speed: number
+  setSpeed: React.Dispatch<React.SetStateAction<number>>
+  play: () => void
+  stop: () => void
+  toggle: () => void
+  skipForward: () => void
+  skipBackward: () => void
+  cycleSpeedUp: () => void
+  cycleSpeedDown: () => void
+} {
   const [isPlaying, setIsPlaying] = useState(false)
   const [speed, setSpeed] = useState(1)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)

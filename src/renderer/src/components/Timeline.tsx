@@ -1,5 +1,5 @@
 import { TimelineTrack } from './TimelineTrack'
-import type { ScreenshotRecord } from '../../../types'
+import type { ScreenshotRecord, GitCommit } from '../../../types'
 import type { DayBounds } from '../../../types'
 
 interface Props {
@@ -8,6 +8,7 @@ interface Props {
   currentTimestamp: number | null
   onSeek: (timestamp: number) => void
   onHoverTimestamp?: (ts: number | null) => void
+  gitCommits?: GitCommit[]
 }
 
 export function Timeline({
@@ -15,7 +16,8 @@ export function Timeline({
   dayBounds,
   currentTimestamp,
   onSeek,
-  onHoverTimestamp
+  onHoverTimestamp,
+  gitCommits
 }: Props): React.JSX.Element {
   if (!dayBounds || screenshots.length === 0) {
     return (
@@ -35,6 +37,7 @@ export function Timeline({
         currentTimestamp={currentTimestamp}
         onSeek={onSeek}
         onHoverTimestamp={onHoverTimestamp}
+        gitCommits={gitCommits}
       />
     </div>
   )

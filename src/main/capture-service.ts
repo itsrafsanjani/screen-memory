@@ -3,8 +3,9 @@ import { DatabaseService } from './database-service'
 import { StorageService } from './storage-service'
 import { IdleDetector } from './idle-detector'
 
-const ACTIVE_INTERVAL_MS = 5000
-const IDLE_INTERVAL_MS = 30000
+const DEFAULT_ACTIVE_INTERVAL_MS = 5000
+const DEFAULT_IDLE_INTERVAL_MS = 30000
+const DEFAULT_JPEG_QUALITY = 65
 
 export class CaptureService {
   private timer: ReturnType<typeof setTimeout> | null = null
@@ -13,6 +14,11 @@ export class CaptureService {
   private storage: StorageService
   private idleDetector: IdleDetector
   private onStatusChanged?: (running: boolean) => void
+  private onScreenshotCaptured?: (screenshotId: number, absolutePath: string) => void
+
+  private activeIntervalMs = DEFAULT_ACTIVE_INTERVAL_MS
+  private idleIntervalMs = DEFAULT_IDLE_INTERVAL_MS
+  private jpegQuality = DEFAULT_JPEG_QUALITY
 
   constructor(db: DatabaseService, storage: StorageService) {
     this.db = db
@@ -22,6 +28,16 @@ export class CaptureService {
 
   setStatusCallback(cb: (running: boolean) => void): void {
     this.onStatusChanged = cb
+  }
+
+  setCaptureCallback(cb: (screenshotId: number, absolutePath: string) => void): void {
+    this.onScreenshotCaptured = cb
+  }
+
+  updateIntervals(activeMs?: number, idleMs?: number, quality?: number): void {
+    if (activeMs !== undefined) this.activeIntervalMs = activeMs
+    if (idleMs !== undefined) this.idleIntervalMs = idleMs
+    if (quality !== undefined) this.jpegQuality = quality
   }
 
   start(): void {
@@ -47,7 +63,7 @@ export class CaptureService {
   private scheduleNext(): void {
     if (!this.running) return
     const idle = this.idleDetector.isIdle()
-    const interval = idle ? IDLE_INTERVAL_MS : ACTIVE_INTERVAL_MS
+    const interval = idle ? this.idleIntervalMs : this.activeIntervalMs
     this.timer = setTimeout(async () => {
       await this.capture()
       this.scheduleNext()
@@ -70,14 +86,14 @@ export class CaptureService {
         const thumbnail = source.thumbnail
         if (thumbnail.isEmpty()) continue
 
-        const jpegBuffer = thumbnail.toJPEG(65)
+        const jpegBuffer = thumbnail.toJPEG(this.jpegQuality)
         const width = thumbnail.getSize().width
         const height = thumbnail.getSize().height
         const displayId = source.display_id || display?.id.toString() || 'unknown'
 
         const relativePath = this.storage.saveImage(timestamp, displayId, jpegBuffer)
 
-        this.db.insertScreenshot({
+        const screenshotId = this.db.insertScreenshot({
           timestamp,
           display_id: displayId,
           file_path: relativePath,
@@ -86,6 +102,11 @@ export class CaptureService {
           file_size: jpegBuffer.length,
           is_idle: idle
         })
+
+        if (!idle && this.onScreenshotCaptured) {
+          const absolutePath = this.storage.getAbsolutePath(relativePath)
+          this.onScreenshotCaptured(screenshotId, absolutePath)
+        }
       }
     } catch (err) {
       console.error('Capture failed:', err)

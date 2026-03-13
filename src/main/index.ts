@@ -14,7 +14,10 @@ import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { DatabaseService } from './database-service'
 import { StorageService } from './storage-service'
 import { CaptureService } from './capture-service'
-import { toggleTimelineWindow, getTimelineWindow } from './app-window'
+import { GitService } from './git-service'
+import { OcrService } from './ocr-service'
+import { AiService } from './ai-service'
+import { toggleTimelineWindow, getTimelineWindow, createTimelineWindow } from './app-window'
 import { pathToFileURL } from 'url'
 
 // Register custom protocol scheme before app ready
@@ -34,6 +37,9 @@ let tray: Tray | null = null
 let db: DatabaseService
 let storage: StorageService
 let capture: CaptureService
+let gitService: GitService
+let ocrService: OcrService
+let aiService: AiService
 
 function createTrayIcon(recording: boolean): Electron.NativeImage {
   // Create a simple 22x22 tray icon (template image for macOS)
@@ -94,6 +100,14 @@ function updateTrayMenu(): void {
     },
     { type: 'separator' },
     {
+      label: 'Settings...',
+      click: () => {
+        const win = getTimelineWindow() || createTimelineWindow()
+        win.webContents.send('open-settings')
+      }
+    },
+    { type: 'separator' },
+    {
       label: 'Launch at Login',
       type: 'checkbox',
       checked: app.getLoginItemSettings().openAtLogin,
@@ -115,6 +129,7 @@ function updateTrayMenu(): void {
 }
 
 function registerIpcHandlers(): void {
+  // --- Screenshot handlers ---
   ipcMain.handle('get-screenshots-by-date', (_e, date: string) => {
     const rows = db.getScreenshotsByDate(date)
     return rows.map((r) => ({ ...r, is_idle: !!r.is_idle }))
@@ -133,6 +148,7 @@ function registerIpcHandlers(): void {
     return rows.map((r) => ({ ...r, is_idle: !!r.is_idle }))
   })
 
+  // --- Capture handlers ---
   ipcMain.handle('start-capture', () => {
     capture.start()
     updateTrayMenu()
@@ -149,6 +165,70 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('get-native-theme', () => {
     return nativeTheme.shouldUseDarkColors
+  })
+
+  // --- Settings handlers ---
+  ipcMain.handle('get-all-settings', () => {
+    return db.getAllSettings()
+  })
+
+  ipcMain.handle('set-setting', (_e, key: string, value: string) => {
+    db.setSetting(key, value)
+
+    // Apply settings changes live
+    if (key.startsWith('capture.')) {
+      const activeMs = db.getSetting('capture.activeIntervalMs')
+      const idleMs = db.getSetting('capture.idleIntervalMs')
+      const quality = db.getSetting('capture.jpegQuality')
+      capture.updateIntervals(
+        activeMs ? parseInt(activeMs, 10) : undefined,
+        idleMs ? parseInt(idleMs, 10) : undefined,
+        quality ? parseInt(quality, 10) : undefined
+      )
+    }
+  })
+
+  ipcMain.handle('get-storage-usage', () => {
+    return storage.getStorageUsage()
+  })
+
+  ipcMain.handle('open-directory-dialog', async () => {
+    const win = getTimelineWindow()
+    if (!win) return null
+    const result = await dialog.showOpenDialog(win, {
+      properties: ['openDirectory']
+    })
+    if (result.canceled || result.filePaths.length === 0) return null
+    return result.filePaths[0]
+  })
+
+  // --- Git handlers ---
+  ipcMain.handle('get-git-commits-by-date', (_e, start: number, end: number) => {
+    return db.getCommitsByDateRange(start, end)
+  })
+
+  ipcMain.handle('get-git-repos', () => {
+    return db.getGitRepos()
+  })
+
+  ipcMain.handle('scan-git-repos', async () => {
+    await gitService.scanRepos()
+    await gitService.pollAllRepos()
+  })
+
+  // --- OCR handlers ---
+  ipcMain.handle('search-ocr', (_e, query: string, startMs?: number, endMs?: number) => {
+    return db.searchOcr(query, startMs, endMs)
+  })
+
+  ipcMain.handle('get-ocr-text', (_e, screenshotId: number) => {
+    const result = db.getOcrByScreenshotId(screenshotId)
+    return result?.text ?? null
+  })
+
+  // --- AI Summary handler ---
+  ipcMain.handle('generate-summary', async (e, startMs: number, endMs: number) => {
+    await aiService.streamSummary(startMs, endMs, e.sender)
   })
 }
 
@@ -276,13 +356,38 @@ app.whenReady().then(async () => {
   db = new DatabaseService()
   storage = new StorageService()
   capture = new CaptureService(db, storage)
+  gitService = new GitService(db)
+  ocrService = new OcrService(db)
+  aiService = new AiService(db)
 
-  // Auto-cleanup old data (7 days retention)
-  const removedDirs = storage.cleanupOldData(7)
+  // Load capture settings
+  const activeMs = db.getSetting('capture.activeIntervalMs')
+  const idleMs = db.getSetting('capture.idleIntervalMs')
+  const quality = db.getSetting('capture.jpegQuality')
+  capture.updateIntervals(
+    activeMs ? parseInt(activeMs, 10) : undefined,
+    idleMs ? parseInt(idleMs, 10) : undefined,
+    quality ? parseInt(quality, 10) : undefined
+  )
+
+  // Auto-cleanup old data
+  const retentionDaysSetting = db.getSetting('storage.retentionDays')
+  const retentionDays = retentionDaysSetting ? parseInt(retentionDaysSetting, 10) : 7
+  const removedDirs = storage.cleanupOldData(retentionDays)
   if (removedDirs.length > 0) {
-    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000
+    const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000
     db.deleteOlderThan(cutoff)
     console.log('Cleaned up old data:', removedDirs)
+  }
+
+  // Connect OCR to capture pipeline
+  if (ocrService.isAvailable()) {
+    capture.setCaptureCallback((screenshotId, absolutePath) => {
+      ocrService.enqueue(screenshotId, absolutePath)
+    })
+    console.log('OCR service enabled')
+  } else {
+    console.log('OCR binary not found, OCR disabled')
   }
 
   // Capture status change → notify renderer
@@ -317,6 +422,14 @@ app.whenReady().then(async () => {
     capture.start()
     updateTrayMenu()
   }
+
+  // Start git service
+  const scanInterval = db.getSetting('git.scanIntervalMinutes')
+  const pollInterval = db.getSetting('git.pollIntervalMinutes')
+  gitService.start(
+    scanInterval ? parseInt(scanInterval, 10) : 60,
+    pollInterval ? parseInt(pollInterval, 10) : 5
+  )
 })
 
 app.on('window-all-closed', () => {
@@ -329,5 +442,6 @@ app.on('activate', () => {
 
 app.on('before-quit', () => {
   capture?.stop()
+  gitService?.stop()
   db?.close()
 })

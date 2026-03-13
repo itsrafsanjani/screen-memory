@@ -1,7 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { ScreenshotRecord, DayBounds } from '../../../types'
 
-export function useScreenshots(date: string) {
+export function useScreenshots(date: string): {
+  screenshots: ScreenshotRecord[]
+  dayBounds: DayBounds | null
+  loading: boolean
+  reload: () => void
+} {
   const [screenshots, setScreenshots] = useState<ScreenshotRecord[]>([])
   const [dayBounds, setDayBounds] = useState<DayBounds | null>(null)
   const [loading, setLoading] = useState(false)

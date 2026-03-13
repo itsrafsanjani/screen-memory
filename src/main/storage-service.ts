@@ -30,6 +30,24 @@ export class StorageService {
     return this.basePath
   }
 
+  getStorageUsage(): number {
+    if (!existsSync(this.basePath)) return 0
+    let totalBytes = 0
+    const walkDir = (dir: string): void => {
+      for (const entry of readdirSync(dir)) {
+        const fullPath = join(dir, entry)
+        const stat = statSync(fullPath)
+        if (stat.isDirectory()) {
+          walkDir(fullPath)
+        } else {
+          totalBytes += stat.size
+        }
+      }
+    }
+    walkDir(this.basePath)
+    return totalBytes
+  }
+
   cleanupOldData(retentionDays: number): string[] {
     const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000
     const cutoffDate = format(new Date(cutoff), 'yyyy-MM-dd')
