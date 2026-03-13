@@ -89,14 +89,42 @@ export function usePlayback(
     if (!currentTimestamp || screenshots.length === 0) return
     const target = currentTimestamp + 60000
     const idx = findNearestScreenshot(screenshots, target)
-    if (idx >= 0) setCurrentTimestamp(screenshots[idx].timestamp)
+    if (idx < 0) return
+
+    if (screenshots[idx].timestamp === currentTimestamp) {
+      // Stuck at same screenshot — jump to next distinct timestamp
+      const curIdx = findNearestScreenshot(screenshots, currentTimestamp)
+      let nextIdx = curIdx + 1
+      while (nextIdx < screenshots.length && screenshots[nextIdx].timestamp === currentTimestamp) {
+        nextIdx++
+      }
+      if (nextIdx < screenshots.length) {
+        setCurrentTimestamp(screenshots[nextIdx].timestamp)
+      }
+    } else {
+      setCurrentTimestamp(screenshots[idx].timestamp)
+    }
   }, [currentTimestamp, screenshots, setCurrentTimestamp])
 
   const skipBackward = useCallback(() => {
     if (!currentTimestamp || screenshots.length === 0) return
     const target = currentTimestamp - 60000
     const idx = findNearestScreenshot(screenshots, target)
-    if (idx >= 0) setCurrentTimestamp(screenshots[idx].timestamp)
+    if (idx < 0) return
+
+    if (screenshots[idx].timestamp === currentTimestamp) {
+      // Stuck at same screenshot — jump to previous distinct timestamp
+      const curIdx = findNearestScreenshot(screenshots, currentTimestamp)
+      let prevIdx = curIdx - 1
+      while (prevIdx >= 0 && screenshots[prevIdx].timestamp === currentTimestamp) {
+        prevIdx--
+      }
+      if (prevIdx >= 0) {
+        setCurrentTimestamp(screenshots[prevIdx].timestamp)
+      }
+    } else {
+      setCurrentTimestamp(screenshots[idx].timestamp)
+    }
   }, [currentTimestamp, screenshots, setCurrentTimestamp])
 
   const cycleSpeedUp = useCallback(() => {

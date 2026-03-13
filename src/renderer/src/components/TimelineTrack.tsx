@@ -272,16 +272,21 @@ export function TimelineTrack({
           return (
             <div
               key={commit.id}
-              className="bg-git-commit"
+              className="bg-git-commit cursor-pointer"
               title={`${commit.repo_name}: ${commit.message}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                seekToMs(commit.timestamp)
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
               style={{
                 position: 'absolute',
                 top: '50%',
                 left: `${pct}%`,
-                width: '6px',
-                height: '6px',
-                transform: 'translate(-3px, -50%) rotate(45deg)',
-                zIndex: 5
+                width: '10px',
+                height: '10px',
+                transform: 'translate(-5px, -50%) rotate(45deg)',
+                zIndex: 15
               }}
             />
           )

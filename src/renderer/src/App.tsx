@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTimeline } from './hooks/useTimeline'
 import { usePlayback } from './hooks/usePlayback'
 import { useGitCommits } from './hooks/useGitCommits'
@@ -43,6 +43,24 @@ function App(): React.JSX.Element {
     hasNextDate
   } = useTimeline()
 
+  const gitCommits = useGitCommits(currentDate)
+
+  // Merge git commits into screenshots as active-state entries for timeline segments & navigation
+  const screenshotsWithCommits = useMemo(() => {
+    if (gitCommits.length === 0) return screenshots
+    const commitEntries = gitCommits.map((c) => ({
+      id: -c.id,
+      timestamp: c.timestamp,
+      display_id: 'git-commit',
+      file_path: '',
+      width: 0,
+      height: 0,
+      file_size: 0,
+      is_idle: false
+    }))
+    return [...screenshots, ...commitEntries].sort((a, b) => a.timestamp - b.timestamp)
+  }, [screenshots, gitCommits])
+
   const {
     isPlaying,
     speed,
@@ -52,13 +70,12 @@ function App(): React.JSX.Element {
     setSpeed,
     cycleSpeedUp,
     cycleSpeedDown
-  } = usePlayback(screenshots, currentTimestamp, setCurrentTimestamp)
+  } = usePlayback(screenshotsWithCommits, currentTimestamp, setCurrentTimestamp)
 
   const [hoverTimestamp, setHoverTimestamp] = useState<number | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('timeline')
   const [settingsOpen, setSettingsOpen] = useState(false)
 
-  const gitCommits = useGitCommits(currentDate)
   const { query, results, searching, search, clearSearch } = useSearch()
 
   // Keyboard shortcuts
@@ -239,7 +256,7 @@ function App(): React.JSX.Element {
             {/* Timeline */}
             <div className="border-t border-border w-full">
               <Timeline
-                screenshots={screenshots}
+                screenshots={screenshotsWithCommits}
                 dayBounds={dayBounds}
                 currentTimestamp={currentTimestamp}
                 onSeek={setCurrentTimestamp}
