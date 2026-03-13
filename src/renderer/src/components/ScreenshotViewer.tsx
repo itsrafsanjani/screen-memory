@@ -86,7 +86,7 @@ export function ScreenshotViewer({
   }
 
   return (
-    <div className="flex-1 flex gap-2 p-2 min-h-0">
+    <div className="flex-1 flex gap-2 p-1 min-h-0">
       {displayScreenshots
         .sort((a, b) => a.display_id.localeCompare(b.display_id))
         .map((shot) => (

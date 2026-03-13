@@ -1,4 +1,4 @@
-import { BrowserWindow, nativeTheme } from 'electron'
+import { BrowserWindow } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 
@@ -19,10 +19,12 @@ export function createTimelineWindow(): BrowserWindow {
     height: 700,
     minWidth: 800,
     minHeight: 500,
-    frame: true,
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 16, y: 14 },
+    vibrancy: 'under-window',
     resizable: true,
     show: false,
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#09090b' : '#ffffff',
+    backgroundColor: '#00000000',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false

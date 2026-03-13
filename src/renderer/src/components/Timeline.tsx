@@ -28,7 +28,7 @@ export function Timeline({
   }
 
   return (
-    <div className="px-4 py-2">
+    <div className="py-1">
       <TimelineTrack
         screenshots={screenshots}
         dayBounds={dayBounds}

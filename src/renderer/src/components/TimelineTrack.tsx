@@ -26,7 +26,9 @@ const effects: Record<string, TimelineEffect> = {
 }
 
 const START_LEFT = 20
-const SCALE_SEC = 600 // 10-minute ticks
+const DEFAULT_SCALE_SEC = 3600 // 1-hour ticks
+const MIN_SCALE_SEC = 300 // 5-min ticks (zoom in)
+const MAX_SCALE_SEC = 7200 // 2-hour ticks (zoom out)
 
 export function TimelineTrack({
   screenshots,
@@ -37,11 +39,16 @@ export function TimelineTrack({
 }: Props): React.JSX.Element {
   const timelineRef = useRef<TimelineState>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const isDragging = useRef(false)
   const [containerWidth, setContainerWidth] = useState(0)
+  const [scaleSec, setScaleSec] = useState(DEFAULT_SCALE_SEC)
 
-  const { first, last } = dayBounds
-  const origin = first
-  const totalDurationSec = (last - first) / 1000
+  // Use midnight of the day as origin for full-day view
+  const { first } = dayBounds
+  const dayStart = new Date(first)
+  dayStart.setHours(0, 0, 0, 0)
+  const origin = dayStart.getTime()
+  const totalDurationSec = 86400 // full 24-hour day
 
   // Measure container width with ResizeObserver
   useEffect(() => {
@@ -104,14 +111,14 @@ export function TimelineTrack({
 
   // Dynamic scaleWidth to fill container
   const { scaleWidth, scaleCount } = useMemo(() => {
-    const count = Math.max(1, Math.ceil(totalDurationSec / SCALE_SEC))
+    const count = Math.max(1, Math.ceil(totalDurationSec / scaleSec))
     if (containerWidth <= 0) {
       return { scaleWidth: 120, scaleCount: count }
     }
     const availableWidth = containerWidth - START_LEFT
     const sw = Math.max(20, availableWidth / count)
     return { scaleWidth: sw, scaleCount: count }
-  }, [totalDurationSec, containerWidth])
+  }, [totalDurationSec, scaleSec, containerWidth])
 
   // Sync cursor to current playback timestamp
   useEffect(() => {
@@ -181,21 +188,40 @@ export function TimelineTrack({
     )
   }, [])
 
-  // Custom scale rendering - show time labels
+  // Custom scale rendering - adaptive time labels based on zoom level
   const getScaleRender = useCallback(
-    (scaleSec: number) => {
-      const ms = timelineSecToMs(scaleSec, origin)
+    (scaleSeconds: number) => {
+      const ms = timelineSecToMs(scaleSeconds, origin)
+      const d = new Date(ms)
+      const h = d.getHours()
+      const h12 = h % 12 || 12
+      const ampm = h >= 12 ? 'p' : 'a'
+      const minutes = d.getMinutes()
+
+      let label: string
+      if (minutes !== 0) {
+        label = formatTimeShort(ms)
+      } else if (scaleWidth >= 50) {
+        label = `${h12} ${h >= 12 ? 'PM' : 'AM'}`
+      } else if (scaleWidth >= 30) {
+        label = `${h12}${ampm}`
+      } else {
+        // Very compact — skip odd hours to reduce clutter
+        if (h % 2 !== 0) return <span />
+        label = `${h12}${ampm}`
+      }
+
       return (
-        <span style={{ fontSize: '10px', color: 'var(--muted-foreground)' }}>
-          {formatTimeShort(ms)}
+        <span style={{ fontSize: '10px', color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>
+          {label}
         </span>
       )
     },
-    [origin]
+    [origin, scaleWidth]
   )
 
-  // Hover handling — notify parent of hovered timestamp
-  const handleMouseMove = useCallback(
+  // Click-and-drag hover handling
+  const computeHoverTimestamp = useCallback(
     (e: React.MouseEvent) => {
       if (!containerRef.current || !onHoverTimestamp) return
       const rect = containerRef.current.getBoundingClientRect()
@@ -204,40 +230,74 @@ export function TimelineTrack({
       const scrollLeft =
         containerRef.current.querySelector('.timeline-editor-edit-area')?.scrollLeft ?? 0
       const pixelOffset = x - START_LEFT + scrollLeft
-      const timeSec = (pixelOffset / scaleWidth) * SCALE_SEC
+      const timeSec = (pixelOffset / scaleWidth) * scaleSec
       const ms = timelineSecToMs(Math.max(0, timeSec), origin)
       onHoverTimestamp(ms)
     },
-    [scaleWidth, origin, onHoverTimestamp]
+    [scaleWidth, scaleSec, origin, onHoverTimestamp]
   )
 
-  const handleMouseLeave = useCallback(() => {
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      isDragging.current = true
+      computeHoverTimestamp(e)
+    },
+    [computeHoverTimestamp]
+  )
+
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      if (!isDragging.current) return
+      computeHoverTimestamp(e)
+    },
+    [computeHoverTimestamp]
+  )
+
+  const handleMouseUp = useCallback(() => {
+    isDragging.current = false
     onHoverTimestamp?.(null)
   }, [onHoverTimestamp])
+
+  const handleMouseLeave = useCallback(() => {
+    isDragging.current = false
+    onHoverTimestamp?.(null)
+  }, [onHoverTimestamp])
+
+  // Zoom via scroll wheel
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault()
+    setScaleSec((prev) => {
+      const delta = e.deltaY > 0 ? 1.2 : 0.8
+      return Math.round(Math.min(MAX_SCALE_SEC, Math.max(MIN_SCALE_SEC, prev * delta)))
+    })
+  }, [])
 
   return (
     <div
       className="relative select-none"
       ref={containerRef}
+      onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseLeave}
+      onWheel={handleWheel}
     >
       <TimelineEditor
         ref={timelineRef}
         editorData={editorData}
         effects={effects}
-        scale={SCALE_SEC}
+        scale={scaleSec}
         scaleWidth={scaleWidth}
         scaleSplitCount={2}
         startLeft={START_LEFT}
-        rowHeight={32}
+        rowHeight={28}
         minScaleCount={scaleCount}
         maxScaleCount={scaleCount}
         hideCursor={false}
         disableDrag={true}
         dragLine={false}
         gridSnap={false}
-        autoScroll={true}
+        autoScroll={false}
         autoReRender={false}
         getActionRender={getActionRender}
         getScaleRender={getScaleRender}
@@ -247,7 +307,7 @@ export function TimelineTrack({
         onClickRow={handleClickRow}
         onClickAction={handleClickAction}
         onChange={() => {}}
-        style={{ height: '60px' }}
+        style={{ height: '50px', overflow: 'hidden' }}
       />
     </div>
   )

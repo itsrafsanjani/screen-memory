@@ -61,10 +61,10 @@ export function PlaybackControls({
       </Tooltip>
 
       <Select value={String(speed)} onValueChange={(v) => onSpeedChange(Number(v))}>
-        <SelectTrigger size="sm" className="w-[60px] h-7 text-xs">
+        <SelectTrigger size="sm" className="w-18 h-7 text-xs">
           <SelectValue />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent position="popper" side="bottom" align="end">
           {SPEEDS.map((s) => (
             <SelectItem key={s} value={String(s)}>
               {s}x

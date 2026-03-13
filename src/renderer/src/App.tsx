@@ -5,7 +5,7 @@ import { ScreenshotViewer } from './components/ScreenshotViewer'
 import { Timeline } from './components/Timeline'
 import { DayPicker } from './components/DayPicker'
 import { PlaybackControls } from './components/PlaybackControls'
-import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { TooltipProvider } from '@/components/ui/tooltip'
 
 function useTheme(): void {
@@ -60,35 +60,46 @@ function App(): React.JSX.Element {
 
   return (
     <TooltipProvider>
-      <div className="h-screen flex flex-col bg-background">
+      <div className="h-screen flex flex-col">
         {/* Toolbar */}
-        <div className="flex items-center justify-between px-4 py-2 border-b border-border">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={toggleRecording} className="gap-1.5 text-xs">
-              <span
-                className={`w-2 h-2 rounded-full ${isRecording ? 'bg-recording animate-pulse' : 'bg-muted-foreground/40'}`}
-              />
-              <span className="text-muted-foreground">{isRecording ? 'Recording' : 'Paused'}</span>
-            </Button>
+        <div className="drag-region grid grid-cols-[1fr_auto_1fr] items-center pl-[80px] pr-4 py-1.5 border-b border-border">
+          <div className="justify-self-start">
+            <Badge
+              variant="secondary"
+              className={`no-drag cursor-pointer ${isRecording ? 'text-green-600' : ''}`}
+              onClick={toggleRecording}
+              asChild
+            >
+              <button>
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${isRecording ? 'bg-recording animate-pulse ' : 'bg-muted-foreground/40'}`}
+                />
+                {isRecording ? 'Recording' : 'Paused'}
+              </button>
+            </Badge>
           </div>
 
-          <DayPicker
-            currentDate={currentDate}
-            hasPrevious={hasPreviousDate}
-            hasNext={hasNextDate}
-            onPrevious={goToPreviousDate}
-            onNext={goToNextDate}
-          />
+          <div className="no-drag">
+            <DayPicker
+              currentDate={currentDate}
+              hasPrevious={hasPreviousDate}
+              hasNext={hasNextDate}
+              onPrevious={goToPreviousDate}
+              onNext={goToNextDate}
+            />
+          </div>
 
-          <PlaybackControls
-            isPlaying={isPlaying}
-            speed={speed}
-            currentTimestamp={currentTimestamp}
-            onToggle={toggle}
-            onSkipForward={skipForward}
-            onSkipBackward={skipBackward}
-            onSpeedChange={setSpeed}
-          />
+          <div className="no-drag justify-self-end">
+            <PlaybackControls
+              isPlaying={isPlaying}
+              speed={speed}
+              currentTimestamp={currentTimestamp}
+              onToggle={toggle}
+              onSkipForward={skipForward}
+              onSkipBackward={skipBackward}
+              onSpeedChange={setSpeed}
+            />
+          </div>
         </div>
 
         {/* Screenshot viewer */}
@@ -105,7 +116,7 @@ function App(): React.JSX.Element {
         )}
 
         {/* Timeline */}
-        <div className="border-t border-border">
+        <div className="border-t border-border w-full">
           <Timeline
             screenshots={screenshots}
             dayBounds={dayBounds}
