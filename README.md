@@ -1,6 +1,8 @@
-# screen-memory
+# ScreenMemory
 
-An Electron application with React and TypeScript
+You finish a long day. You touched 6 repos, fixed 3 bugs, wrote bash scripts, reviewed PRs, had 2 meetings, and can't remember what you actually did for that standup tomorrow. Your git log helps but doesn't tell the whole story. Nothing does.
+
+An Electron application with React and TypeScript to help you remember what you actually did today.
 
 ## Recommended IDE Setup
 
@@ -11,24 +13,24 @@ An Electron application with React and TypeScript
 ### Install
 
 ```bash
-$ npm install
+$ pnpm install
 ```
 
 ### Development
 
 ```bash
-$ npm run dev
+$ pnpm run dev
 ```
 
 ### Build
 
 ```bash
 # For windows
-$ npm run build:win
+$ pnpm run build:win
 
 # For macOS
-$ npm run build:mac
+$ pnpm run build:mac
 
 # For Linux
-$ npm run build:linux
+$ pnpm run build:linux
 ```
