@@ -239,7 +239,7 @@ export function TimelineTrack({
       {/* Bar area */}
       <div
         ref={barRef}
-        className="relative h-7 bg-secondary rounded cursor-pointer"
+        className="relative h-8 bg-secondary rounded cursor-pointer"
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -252,7 +252,7 @@ export function TimelineTrack({
           return (
             <div
               key={i}
-              className={seg.isIdle ? 'bg-idle/40' : 'bg-active/60'}
+              className={seg.isIdle ? 'bg-idle/30' : 'bg-active/50'}
               style={{
                 position: 'absolute',
                 top: 0,
@@ -301,9 +301,10 @@ export function TimelineTrack({
               top: 0,
               bottom: 0,
               left: `${playheadPct}%`,
-              width: '2px',
-              transform: 'translateX(-1px)',
-              zIndex: 10
+              width: '3px',
+              transform: 'translateX(-1.5px)',
+              zIndex: 10,
+              boxShadow: '0 0 6px rgba(0, 0, 0, 0.15)'
             }}
           />
         ) : null}
@@ -331,11 +332,11 @@ export function TimelineTrack({
       </div>
 
       {/* Time labels */}
-      <div className="relative h-4 mt-0.5">
+      <div className="relative h-5 mt-1">
         {ticks.map((t) => (
           <span
             key={t.ms}
-            className="absolute text-[10px] text-muted-foreground whitespace-nowrap -translate-x-1/2"
+            className="absolute text-[11px] text-muted-foreground whitespace-nowrap -translate-x-1/2"
             style={{ left: `${t.pct}%` }}
           >
             {formatTimeShort(t.ms)}

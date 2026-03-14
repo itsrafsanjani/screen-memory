@@ -33,7 +33,7 @@ function CrossfadeImage({ src, alt }: { src: string; alt: string }): React.JSX.E
       <img
         src={`screenmemory://${encodeURIComponent(displaySrc)}`}
         alt={alt}
-        className="max-w-full max-h-full object-contain rounded absolute"
+        className="max-w-full max-h-full object-contain rounded-lg shadow-sm border border-border/40 absolute"
         style={{ willChange: 'opacity' }}
         draggable={false}
       />
@@ -42,7 +42,7 @@ function CrossfadeImage({ src, alt }: { src: string; alt: string }): React.JSX.E
         <img
           src={`screenmemory://${encodeURIComponent(nextSrc)}`}
           alt={alt}
-          className="max-w-full max-h-full object-contain rounded absolute"
+          className="max-w-full max-h-full object-contain rounded-lg shadow-sm border border-border/40 absolute"
           style={{
             opacity: loaded ? 1 : 0,
             transition: 'opacity 150ms ease',
@@ -77,7 +77,7 @@ export function ScreenshotViewer({
     return (
       <div className="flex-1 flex items-center justify-center text-muted-foreground">
         <div className="text-center">
-          <Monitor className="size-10 mx-auto mb-2 opacity-30" />
+          <Monitor className="size-12 mx-auto mb-3 opacity-20" />
           <p>No screenshots to display</p>
           <p className="text-sm mt-1">Start recording to capture your screen</p>
         </div>
@@ -86,7 +86,7 @@ export function ScreenshotViewer({
   }
 
   return (
-    <div className="flex-1 flex gap-2 p-1 min-h-0">
+    <div className="flex-1 flex gap-2 p-4 min-h-0">
       {displayScreenshots
         .sort((a, b) => a.display_id.localeCompare(b.display_id))
         .map((shot) => (

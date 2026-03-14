@@ -32,6 +32,7 @@ export function createTimelineWindow(): BrowserWindow {
   })
 
   timelineWindow.on('ready-to-show', () => {
+    timelineWindow?.maximize()
     timelineWindow?.show()
   })
 

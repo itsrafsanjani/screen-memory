@@ -61,7 +61,7 @@ export function PlaybackControls({
       </Tooltip>
 
       <Select value={String(speed)} onValueChange={(v) => onSpeedChange(Number(v))}>
-        <SelectTrigger size="sm" className="w-18 h-7 text-xs">
+        <SelectTrigger size="sm" className="w-18 h-7 text-xs rounded-lg">
           <SelectValue />
         </SelectTrigger>
         <SelectContent position="popper" side="bottom" align="end">
@@ -74,7 +74,7 @@ export function PlaybackControls({
       </Select>
 
       {currentTimestamp && (
-        <span className="text-xs text-muted-foreground font-mono ml-1">
+        <span className="text-xs text-muted-foreground font-mono tabular-nums ml-1">
           {formatTime(currentTimestamp)}
         </span>
       )}

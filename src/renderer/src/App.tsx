@@ -14,6 +14,7 @@ import { SummaryView } from './components/SummaryView'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { Separator } from '@/components/ui/separator'
 import { Settings, Sparkles, Monitor } from 'lucide-react'
 
 function useTheme(): void {
@@ -145,37 +146,37 @@ function App(): React.JSX.Element {
     <TooltipProvider>
       <div className="h-screen flex flex-col">
         {/* Toolbar */}
-        <div className="drag-region grid grid-cols-[1fr_auto_1fr] items-center pl-[80px] pr-4 py-1.5 border-b border-border">
-          <div className="justify-self-start flex items-center gap-2">
+        <div className="drag-region grid grid-cols-[1fr_auto_1fr] items-center pl-[80px] pr-4 py-2.5 border-b border-border/60">
+          <div className="justify-self-start flex items-center gap-3">
             <Badge
               variant="secondary"
-              className={`no-drag cursor-pointer ${isRecording ? 'text-green-600' : ''}`}
+              className={`no-drag cursor-pointer px-2.5 py-1 ${isRecording ? 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400' : ''}`}
               onClick={toggleRecording}
               asChild
             >
               <button>
                 <span
-                  className={`w-1.5 h-1.5 rounded-full ${isRecording ? 'bg-recording animate-pulse ' : 'bg-muted-foreground/40'}`}
+                  className={`w-1.5 h-1.5 rounded-full ${isRecording ? 'bg-green-500 animate-pulse' : 'bg-muted-foreground/40'}`}
                 />
                 {isRecording ? 'Recording' : 'Paused'}
               </button>
             </Badge>
 
-            {/* View mode toggle */}
-            <div className="no-drag flex items-center gap-0.5">
+            {/* View mode toggle — segmented control */}
+            <div className="no-drag flex items-center bg-secondary rounded-lg p-0.5 gap-0.5">
               <Button
-                variant={viewMode === 'timeline' ? 'secondary' : 'ghost'}
-                size="icon"
-                className="h-6 w-6"
+                variant="ghost"
+                size="sm"
+                className={`h-6 px-2.5 ${viewMode === 'timeline' ? 'bg-background shadow-sm rounded-md' : ''}`}
                 onClick={() => setViewMode('timeline')}
                 title="Timeline"
               >
                 <Monitor className="h-3 w-3" />
               </Button>
               <Button
-                variant={viewMode === 'summary' ? 'secondary' : 'ghost'}
-                size="icon"
-                className="h-6 w-6"
+                variant="ghost"
+                size="sm"
+                className={`h-6 px-2.5 ${viewMode === 'summary' ? 'bg-background shadow-sm rounded-md' : ''}`}
                 onClick={() => setViewMode('summary')}
                 title="AI Summary"
               >
@@ -216,10 +217,11 @@ function App(): React.JSX.Element {
                 />
               </>
             )}
+            <Separator orientation="vertical" className="h-5" />
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7"
+              className="h-7 w-7 rounded-full"
               onClick={() => setSettingsOpen(true)}
               title="Settings"
             >
@@ -254,7 +256,7 @@ function App(): React.JSX.Element {
             )}
 
             {/* Timeline */}
-            <div className="border-t border-border w-full">
+            <div className="border-t border-border/60 w-full">
               <Timeline
                 screenshots={screenshotsWithCommits}
                 dayBounds={dayBounds}

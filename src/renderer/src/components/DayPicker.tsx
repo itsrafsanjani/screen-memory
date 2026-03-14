@@ -22,7 +22,7 @@ export function DayPicker({
       <Button variant="ghost" size="icon-sm" onClick={onPrevious} disabled={!hasPrevious}>
         <ChevronLeft className="size-4" />
       </Button>
-      <span className="text-sm font-medium text-foreground min-w-[100px] text-center">
+      <span className="text-sm font-semibold text-foreground min-w-[100px] text-center">
         {formatDateDisplay(currentDate)}
       </span>
       <Button variant="ghost" size="icon-sm" onClick={onNext} disabled={!hasNext}>

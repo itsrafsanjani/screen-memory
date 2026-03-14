@@ -19,6 +19,7 @@ import { OcrService } from './ocr-service'
 import { AiService } from './ai-service'
 import { toggleTimelineWindow, getTimelineWindow, createTimelineWindow } from './app-window'
 import { pathToFileURL } from 'url'
+import { join } from 'path'
 
 // Register custom protocol scheme before app ready
 protocol.registerSchemesAsPrivileged([
@@ -42,36 +43,22 @@ let ocrService: OcrService
 let aiService: AiService
 
 function createTrayIcon(recording: boolean): Electron.NativeImage {
-  // Create a simple 22x22 tray icon (template image for macOS)
-  const size = 22
-  const canvas = Buffer.alloc(size * size * 4, 0)
+  const iconPath = app.isPackaged
+    ? join(process.resourcesPath, 'iconTemplate.png')
+    : join(__dirname, '../../resources/iconTemplate.png')
 
-  // Draw a filled circle in the center
-  const cx = size / 2
-  const cy = size / 2
-  const r = recording ? 7 : 6
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2)
-      if (dist <= r) {
-        const idx = (y * size + x) * 4
-        if (recording) {
-          canvas[idx] = 0 // R
-          canvas[idx + 1] = 0 // G
-          canvas[idx + 2] = 0 // B
-          canvas[idx + 3] = 255 // A
-        } else {
-          canvas[idx] = 0
-          canvas[idx + 1] = 0
-          canvas[idx + 2] = 0
-          canvas[idx + 3] = 128 // semi-transparent for paused
-        }
-      }
+  const img = nativeImage.createFromPath(iconPath).resize({ width: 22, height: 22 })
+
+  if (!recording) {
+    // Dim the icon for paused state by reducing alpha
+    const size = img.getSize()
+    const bitmap = img.toBitmap()
+    for (let i = 3; i < bitmap.length; i += 4) {
+      bitmap[i] = Math.round(bitmap[i] * 0.4)
     }
+    return nativeImage.createFromBitmap(bitmap, size)
   }
 
-  const img = nativeImage.createFromBuffer(canvas, { width: size, height: size })
-  img.setTemplateImage(true)
   return img
 }
 

@@ -28,7 +28,7 @@ export function SearchBar({
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
           <Input
             placeholder="Search screen text..."
-            className="h-7 w-48 pl-7 text-xs"
+            className="h-7 w-48 pl-7 text-xs rounded-lg"
             value={query}
             onChange={(e) => onSearch(e.target.value)}
           />
@@ -47,7 +47,7 @@ export function SearchBar({
 
       {/* Search results dropdown */}
       {query && results.length > 0 && (
-        <div className="absolute top-full right-0 mt-1 w-72 max-h-60 overflow-y-auto rounded-md border border-border bg-popover shadow-md z-50">
+        <div className="absolute top-full right-0 mt-1 w-72 max-h-60 overflow-y-auto rounded-lg border border-border bg-popover shadow-lg z-50">
           {searching && <div className="p-2 text-xs text-muted-foreground">Searching...</div>}
           {results.map((r, i) => (
             <button

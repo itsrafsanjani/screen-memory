@@ -68,10 +68,10 @@ export function DetailSidebar({
   }
 
   return (
-    <div className="w-[300px] border-l border-border flex flex-col min-h-0">
+    <div className="w-[320px] border-l border-border flex flex-col min-h-0">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border">
-        <span className="text-xs font-medium text-muted-foreground">Details</span>
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+        <span className="text-sm font-semibold text-muted-foreground">Details</span>
         <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setCollapsed(true)}>
           <ChevronRight className="h-3 w-3" />
         </Button>
@@ -87,7 +87,10 @@ export function DetailSidebar({
             </div>
             <div className="space-y-2">
               {nearbyCommits.map((c) => (
-                <div key={c.id} className="rounded-md border border-border p-2 text-xs space-y-1">
+                <div
+                  key={c.id}
+                  className="rounded-lg border border-border border-l-2 border-l-git-commit p-2 text-xs space-y-1 shadow-xs"
+                >
                   <div className="font-medium truncate">{c.message}</div>
                   <div className="text-muted-foreground">{c.repo_name}</div>
                   <div className="flex items-center gap-2 text-muted-foreground">
@@ -117,7 +120,7 @@ export function DetailSidebar({
               <FileText className="h-3.5 w-3.5" />
               <span className="text-xs font-medium">Screen Text</span>
             </div>
-            <div className="rounded-md border border-border p-2 text-xs text-muted-foreground max-h-[200px] overflow-y-auto whitespace-pre-wrap break-words">
+            <div className="rounded-lg border border-border p-3 text-xs text-muted-foreground max-h-[200px] overflow-y-auto whitespace-pre-wrap break-words">
               {ocrText.slice(0, 500)}
               {ocrText.length > 500 && '...'}
             </div>
