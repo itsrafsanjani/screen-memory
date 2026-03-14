@@ -18,14 +18,15 @@ export class AiService {
     const model = this.db.getSetting('ai.model') || this.getDefaultModel(provider)
     const baseUrl = this.db.getSetting('ai.baseUrl')
 
-    if (!apiKey && provider !== 'ollama') {
+    if (!apiKey && provider !== 'ollama' && provider !== 'lmstudio') {
       webContents.send('summary-error', 'No API key configured. Please set one in Settings.')
+      webContents.send('summary-done')
       return
     }
 
-    const prompt = this.buildPrompt(startMs, endMs)
-
     try {
+      const prompt = this.buildPrompt(startMs, endMs)
+
       // Dynamic import to avoid bundling issues
       const { streamText } = await import('ai')
       const modelInstance = await this.createModel(provider, apiKey, model, baseUrl)
@@ -38,14 +39,11 @@ export class AiService {
       for await (const chunk of result.textStream) {
         webContents.send('summary-chunk', chunk)
       }
-
-      webContents.send('summary-done')
     } catch (err) {
       console.error('AI summary error:', err)
-      webContents.send(
-        'summary-error',
-        err instanceof Error ? err.message : 'Failed to generate summary'
-      )
+      webContents.send('summary-error', this.getErrorMessage(err, provider))
+    } finally {
+      webContents.send('summary-done')
     }
   }
 
@@ -57,6 +55,8 @@ export class AiService {
         return 'gemini-2.0-flash'
       case 'ollama':
         return 'llama3'
+      case 'lmstudio':
+        return ''
       default:
         return 'gpt-4o-mini'
     }
@@ -88,6 +88,14 @@ export class AiService {
         })
         return ollama(model)
       }
+      case 'lmstudio': {
+        const { createOpenAI } = await import('@ai-sdk/openai')
+        const lmstudio = createOpenAI({
+          baseURL: baseUrl || 'http://localhost:1234/v1',
+          apiKey: 'lmstudio'
+        })
+        return lmstudio(model)
+      }
       default: {
         const { createOpenAI } = await import('@ai-sdk/openai')
         const openai = createOpenAI({
@@ -97,6 +105,49 @@ export class AiService {
         return openai(model)
       }
     }
+  }
+
+  private getErrorMessage(err: unknown, provider: string): string {
+    const errMsg = err instanceof Error ? err.message : String(err)
+
+    // Walk the cause chain to extract code/status from nested errors (AI SDK wraps errors)
+    let errCode: string | undefined
+    let statusCode: number | undefined
+    let current: unknown = err
+    while (current) {
+      if (!errCode) errCode = (current as { code?: string }).code
+      if (!statusCode) {
+        statusCode =
+          (current as { status?: number }).status || (current as { statusCode?: number }).statusCode
+      }
+      const next = (current as { cause?: unknown }).cause
+      current = next && next !== current ? next : undefined
+    }
+
+    // Fallback: check the message string for common patterns
+    if (!errCode && errMsg.includes('ECONNREFUSED')) errCode = 'ECONNREFUSED'
+    if (!errCode && errMsg.includes('ETIMEDOUT')) errCode = 'ETIMEDOUT'
+
+    if (errCode === 'ECONNREFUSED') {
+      return `Cannot connect to ${provider}. Make sure it's running.`
+    }
+    if (errCode === 'ETIMEDOUT' || errCode === 'ESOCKETTIMEDOUT') {
+      return `Connection to ${provider} timed out. Check your network or try again.`
+    }
+    if (statusCode === 401 || statusCode === 403) {
+      return 'Invalid API key. Check your key in Settings.'
+    }
+    if (statusCode === 404) {
+      return 'Model not found. Check the model name in Settings.'
+    }
+    if (statusCode === 429) {
+      return 'Rate limited. Please wait and try again.'
+    }
+    if (statusCode && statusCode >= 500) {
+      return `Server error from ${provider}. Try again later.`
+    }
+
+    return errMsg || 'Failed to generate summary'
   }
 
   private buildPrompt(startMs: number, endMs: number): string {

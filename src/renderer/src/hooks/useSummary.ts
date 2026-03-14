@@ -26,22 +26,34 @@ export function useSummary(): {
     setError(null)
     setLoading(true)
 
+    // Safety timeout — if streaming hangs, stop loading after 120s
+    const timeoutId = setTimeout(() => {
+      setError('Summary generation timed out. Please try again.')
+      setLoading(false)
+    }, 120_000)
+
+    const clearTimer = (): void => clearTimeout(timeoutId)
+
     const unsubChunk = window.electronAPI.onSummaryChunk((chunk) => {
       setText((prev) => prev + chunk)
     })
     const unsubDone = window.electronAPI.onSummaryDone(() => {
+      clearTimer()
       setLoading(false)
     })
     const unsubError = window.electronAPI.onSummaryError((err) => {
+      clearTimer()
       setError(err)
       setLoading(false)
     })
 
-    cleanupRef.current = [unsubChunk, unsubDone, unsubError]
+    cleanupRef.current = [unsubChunk, unsubDone, unsubError, clearTimer]
 
     try {
       await window.electronAPI.generateSummary(startMs, endMs)
     } catch (err) {
+      clearTimer()
+      console.error('Summary generation failed:', err)
       setError(err instanceof Error ? err.message : 'Failed to generate summary')
       setLoading(false)
     }

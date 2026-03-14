@@ -17,7 +17,8 @@ const PROVIDERS = [
   { value: 'openai', label: 'OpenAI' },
   { value: 'anthropic', label: 'Anthropic' },
   { value: 'google', label: 'Google' },
-  { value: 'ollama', label: 'Ollama (Local)' }
+  { value: 'ollama', label: 'Ollama (Local)' },
+  { value: 'lmstudio', label: 'LM Studio (Local)' }
 ]
 
 export function AIProviderSettings({ getSetting, updateSetting }: Props): React.JSX.Element {
@@ -43,7 +44,7 @@ export function AIProviderSettings({ getSetting, updateSetting }: Props): React.
         </Select>
       </div>
 
-      {provider !== 'ollama' && (
+      {provider !== 'ollama' && provider !== 'lmstudio' && (
         <div className="space-y-2">
           <Label>API Key</Label>
           <Input
@@ -65,7 +66,9 @@ export function AIProviderSettings({ getSetting, updateSetting }: Props): React.
                 ? 'gemini-2.0-flash'
                 : provider === 'ollama'
                   ? 'llama3'
-                  : 'gpt-4o-mini'
+                  : provider === 'lmstudio'
+                    ? 'loaded model'
+                    : 'gpt-4o-mini'
           }
           value={getSetting('ai.model')}
           onChange={(e) => updateSetting('ai.model', e.target.value)}
@@ -73,11 +76,17 @@ export function AIProviderSettings({ getSetting, updateSetting }: Props): React.
         <p className="text-xs text-muted-foreground">Leave empty for default</p>
       </div>
 
-      {(provider === 'openai' || provider === 'ollama') && (
+      {(provider === 'openai' || provider === 'ollama' || provider === 'lmstudio') && (
         <div className="space-y-2">
           <Label>Base URL</Label>
           <Input
-            placeholder={provider === 'ollama' ? 'http://localhost:11434/v1' : 'Optional'}
+            placeholder={
+              provider === 'ollama'
+                ? 'http://localhost:11434/v1'
+                : provider === 'lmstudio'
+                  ? 'http://localhost:1234/v1'
+                  : 'Optional'
+            }
             value={getSetting('ai.baseUrl')}
             onChange={(e) => updateSetting('ai.baseUrl', e.target.value)}
           />
