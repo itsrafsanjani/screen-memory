@@ -144,7 +144,7 @@ function App(): React.JSX.Element {
 
   return (
     <TooltipProvider>
-      <div className="h-screen flex flex-col">
+      <div className="h-screen flex flex-col bg-background">
         {/* Toolbar */}
         <div className="drag-region grid grid-cols-[1fr_auto_1fr] items-center pl-[80px] pr-4 py-2.5 border-b border-border/60">
           <div className="justify-self-start flex items-center gap-3">
