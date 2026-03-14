@@ -112,7 +112,32 @@ export class GitService {
     }
   }
 
-  private fetchCommits(repoPath: string, repoName: string, lastScanned: number): Promise<void> {
+  private getGitUserEmail(repoPath: string): Promise<string> {
+    return new Promise((resolve) => {
+      execFile(
+        'git',
+        ['-C', repoPath, 'config', 'user.email'],
+        { timeout: 5000 },
+        (err, stdout) => {
+          resolve(err ? '' : stdout.trim())
+        }
+      )
+    })
+  }
+
+  private async fetchCommits(
+    repoPath: string,
+    repoName: string,
+    lastScanned: number
+  ): Promise<void> {
+    let authorEmail = this.db.getSetting('git.authorEmail')
+    if (!authorEmail) {
+      authorEmail = await this.getGitUserEmail(repoPath)
+      if (authorEmail) {
+        this.db.setSetting('git.authorEmail', authorEmail)
+      }
+    }
+
     return new Promise((resolve) => {
       // If never scanned, only fetch last 30 days
       const since = lastScanned
@@ -126,7 +151,8 @@ export class GitService {
         '--all',
         `--format=%H%x00%at%x00%an%x00%ae%x00%s`,
         '--shortstat',
-        `--since=${since}`
+        `--since=${since}`,
+        ...(authorEmail ? [`--author=${authorEmail}`] : [])
       ]
 
       execFile('git', args, { timeout: 30000, maxBuffer: 10 * 1024 * 1024 }, (err, stdout) => {

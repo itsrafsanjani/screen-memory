@@ -82,6 +82,20 @@ export function GitSettings({ getSetting, updateSetting }: Props): React.JSX.Ele
       </div>
 
       <div className="space-y-2">
+        <Label>Git Author Email</Label>
+        <p className="text-xs text-muted-foreground">
+          Only show commits from this email. Auto-detected from git config if left empty.
+        </p>
+        <Input
+          type="text"
+          placeholder="Auto-detect from git config"
+          value={getSetting('git.authorEmail', '')}
+          onChange={(e) => updateSetting('git.authorEmail', e.target.value)}
+          className="w-64"
+        />
+      </div>
+
+      <div className="space-y-2">
         <Label>Scan Interval (minutes)</Label>
         <Input
           type="number"
