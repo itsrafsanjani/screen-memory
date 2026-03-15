@@ -10,6 +10,7 @@ import {
   nativeImage,
   nativeTheme
 } from 'electron'
+import { autoUpdater } from 'electron-updater'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { DatabaseService } from './database-service'
 import { StorageService } from './storage-service'
@@ -402,6 +403,48 @@ app.whenReady().then(async () => {
   tray.setToolTip('Screen Memory')
   tray.on('click', () => toggleTimelineWindow())
   updateTrayMenu()
+
+  // Configure auto-updater
+  autoUpdater.autoDownload = false
+  autoUpdater.autoInstallOnAppQuit = true
+
+  autoUpdater.on('update-available', (info) => {
+    dialog
+      .showMessageBox({
+        type: 'info',
+        title: 'Update Available',
+        message: `Version ${info.version} is available. Would you like to download it?`,
+        buttons: ['Download', 'Later'],
+        defaultId: 0
+      })
+      .then((result) => {
+        if (result.response === 0) {
+          autoUpdater.downloadUpdate()
+        }
+      })
+  })
+
+  autoUpdater.on('update-downloaded', () => {
+    dialog
+      .showMessageBox({
+        type: 'info',
+        title: 'Update Ready',
+        message: 'Update has been downloaded. The app will restart to install it.',
+        buttons: ['Restart Now', 'Later'],
+        defaultId: 0
+      })
+      .then((result) => {
+        if (result.response === 0) {
+          autoUpdater.quitAndInstall()
+        }
+      })
+  })
+
+  autoUpdater.on('error', (err) => {
+    console.error('Auto-updater error:', err)
+  })
+
+  autoUpdater.checkForUpdates()
 
   // Check permission and start capture
   const hasPermission = await checkScreenRecordingPermission()

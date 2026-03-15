@@ -4,6 +4,32 @@ You finish a long day. You touched 6 repos, fixed 3 bugs, wrote bash scripts, re
 
 An Electron application with React and TypeScript to help you remember what you actually did today.
 
+## Installation
+
+### Homebrew (Recommended)
+
+```bash
+brew tap itsrafsanjani/screen-memory
+brew install --cask screen-memory
+```
+
+### Manual Download
+
+Download the latest `.dmg` from [GitHub Releases](https://github.com/itsrafsanjani/screen-memory/releases/latest).
+
+### Gatekeeper Notice
+
+Screen Memory is not signed with an Apple Developer certificate. On first launch, macOS will block the app. To open it:
+
+1. Go to **System Settings > Privacy & Security**
+2. Scroll down and click **Open Anyway** next to the Screen Memory message
+
+Or run in Terminal:
+
+```bash
+xattr -cr /Applications/Screen\ Memory.app
+```
+
 ## Recommended IDE Setup
 
 - [VSCode](https://code.visualstudio.com/) + [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint) + [Prettier](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode)

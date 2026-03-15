@@ -20,7 +20,14 @@ mac:
   extendInfo:
     NSScreenCaptureUsageDescription: Screen Memory needs screen recording access to capture screenshots of your desktop.
   notarize: false
+  target:
+    - target: dmg
+      arch: arm64
+    - target: zip
+      arch: arm64
+  artifactName: 'Screen-Memory-${version}-arm64.${ext}'
 npmRebuild: false
 publish:
-  provider: generic
-  url: https://example.com/auto-updates
+  provider: github
+  owner: itsrafsanjani
+  repo: screen-memory
