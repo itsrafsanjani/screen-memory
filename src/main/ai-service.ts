@@ -110,18 +110,30 @@ export class AiService {
   private getErrorMessage(err: unknown, provider: string): string {
     const errMsg = err instanceof Error ? err.message : String(err)
 
-    // Walk the cause chain to extract code/status from nested errors (AI SDK wraps errors)
+    // Walk the error tree to extract code/status from nested errors (AI SDK wraps errors).
+    // RetryError uses `lastError` and `errors[]`, not just `cause`, so we visit those too.
     let errCode: string | undefined
     let statusCode: number | undefined
-    let current: unknown = err
-    while (current) {
+    const visited = new Set<unknown>()
+    const queue: unknown[] = [err]
+    while (queue.length > 0) {
+      const current = queue.shift()
+      if (!current || typeof current !== 'object' || visited.has(current)) continue
+      visited.add(current)
+
       if (!errCode) errCode = (current as { code?: string }).code
       if (!statusCode) {
         statusCode =
           (current as { status?: number }).status || (current as { statusCode?: number }).statusCode
       }
-      const next = (current as { cause?: unknown }).cause
-      current = next && next !== current ? next : undefined
+
+      // Follow all paths the AI SDK uses to nest errors
+      const cause = (current as { cause?: unknown }).cause
+      const lastError = (current as { lastError?: unknown }).lastError
+      const errors = (current as { errors?: unknown[] }).errors
+      if (cause) queue.push(cause)
+      if (lastError) queue.push(lastError)
+      if (Array.isArray(errors)) queue.push(...errors)
     }
 
     // Fallback: check the message string for common patterns
@@ -148,6 +160,13 @@ export class AiService {
     }
 
     return errMsg || 'Failed to generate summary'
+  }
+
+  private getHourBlock(timestampMs: number): string {
+    const hour = new Date(timestampMs).getHours()
+    const start = String(hour).padStart(2, '0') + ':00'
+    const end = String(hour + 1).padStart(2, '0') + ':00'
+    return `${start} - ${end}`
   }
 
   private buildPrompt(startMs: number, endMs: number): string {
@@ -178,43 +197,77 @@ export class AiService {
     const endDate = new Date(endMs).toLocaleDateString()
     const period = startDate === endDate ? startDate : `${startDate} - ${endDate}`
 
+    // Group commits by hour block, then by repo within each hour
+    const commitsByHour = new Map<string, Map<string, typeof commits>>()
+    for (const c of commits) {
+      const block = this.getHourBlock(c.timestamp)
+      if (!commitsByHour.has(block)) commitsByHour.set(block, new Map())
+      const repoMap = commitsByHour.get(block)!
+      const existing = repoMap.get(c.repo_name) || []
+      existing.push(c)
+      repoMap.set(c.repo_name, existing)
+    }
+
+    // Group OCR samples by hour block, cap at 6 per block
+    const ocrByHour = new Map<string, typeof ocrSamples>()
+    for (const s of ocrSamples) {
+      const block = this.getHourBlock(s.timestamp)
+      const existing = ocrByHour.get(block) || []
+      if (existing.length < 6) {
+        existing.push(s)
+        ocrByHour.set(block, existing)
+      }
+    }
+
     let prompt = `You are summarizing a developer's work activity for the period: ${period}.
 
-Based on the following data, write a concise summary of what the developer worked on, organized by project/repo. Include key accomplishments, areas of focus, and a brief timeline of activity.
+Git commits are the PRIMARY source of truth for what the developer accomplished. Screen activity is supplementary context only — use it to fill in gaps or add color, but never let it overshadow git data.
+
+Produce two top-level sections in your output:
+
+## Development Summary
+Based on git commits. Use ### HH:00 - HH:00 sub-headers for each hour block. Within each block, group by repo and describe accomplishments. Omit hour blocks with no commits.
+
+## General Activity
+Based on screen activity. Use ### HH:00 - HH:00 sub-headers for each hour block. Write 1-2 sentences per block describing what the developer was doing on screen. Omit hour blocks with no screen data.
 
 Format the output as clean Markdown with headers and bullet points.
 
 `
 
-    // Add git commits grouped by repo
-    if (commits.length > 0) {
-      prompt += `## Git Commits\n\n`
-      const byRepo = new Map<string, typeof commits>()
-      for (const c of commits) {
-        const existing = byRepo.get(c.repo_name) || []
-        existing.push(c)
-        byRepo.set(c.repo_name, existing)
-      }
-      for (const [repo, repoCommits] of byRepo) {
-        prompt += `### ${repo}\n`
-        for (const c of repoCommits) {
-          const time = new Date(c.timestamp).toLocaleTimeString()
-          prompt += `- [${time}] ${c.message} (+${c.insertions}/-${c.deletions}, ${c.files_changed} files)\n`
+    // Add git commits grouped by hour and repo
+    if (commitsByHour.size > 0) {
+      prompt += `## Raw Data: Git Commits (Primary)\n\n`
+      for (const [block, repoMap] of commitsByHour) {
+        prompt += `### ${block}\n`
+        for (const [repo, repoCommits] of repoMap) {
+          prompt += `**${repo}**\n`
+          for (const c of repoCommits) {
+            const time = new Date(c.timestamp).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false
+            })
+            prompt += `- [${time}] ${c.message} (+${c.insertions}/-${c.deletions}, ${c.files_changed} files)\n`
+          }
         }
         prompt += '\n'
       }
     }
 
-    // Add OCR samples
-    if (ocrSamples.length > 0) {
-      prompt += `## Screen Activity Samples\n\n`
-      // Limit total prompt size
-      const maxSamples = 30
-      const step = Math.max(1, Math.floor(ocrSamples.length / maxSamples))
-      for (let i = 0; i < ocrSamples.length; i += step) {
-        const s = ocrSamples[i]
-        const time = new Date(s.timestamp).toLocaleTimeString()
-        prompt += `[${time}]: ${s.text}\n\n`
+    // Add OCR samples grouped by hour
+    if (ocrByHour.size > 0) {
+      prompt += `## Raw Data: Screen Activity Samples (Supplementary)\n\n`
+      for (const [block, samples] of ocrByHour) {
+        prompt += `### ${block}\n`
+        for (const s of samples) {
+          const time = new Date(s.timestamp).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+          })
+          prompt += `[${time}]: ${s.text}\n\n`
+        }
       }
     }
 
