@@ -20,6 +20,7 @@ mac:
   extendInfo:
     NSScreenCaptureUsageDescription: Screen Memory needs screen recording access to capture screenshots of your desktop.
   notarize: false
+  identity: null
   target:
     - target: dmg
       arch: arm64
