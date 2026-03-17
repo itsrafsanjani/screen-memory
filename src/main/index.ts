@@ -1,5 +1,6 @@
 import {
   app,
+  desktopCapturer,
   ipcMain,
   Menu,
   net,
@@ -57,9 +58,12 @@ function createTrayIcon(recording: boolean): Electron.NativeImage {
     for (let i = 3; i < bitmap.length; i += 4) {
       bitmap[i] = Math.round(bitmap[i] * 0.4)
     }
-    return nativeImage.createFromBitmap(bitmap, size)
+    const dimmed = nativeImage.createFromBitmap(bitmap, size)
+    dimmed.setTemplateImage(true)
+    return dimmed
   }
 
+  img.setTemplateImage(true)
   return img
 }
 
@@ -231,9 +235,24 @@ function registerProtocol(): void {
 async function checkScreenRecordingPermission(): Promise<boolean> {
   if (process.platform !== 'darwin') return true
 
+  // Fast path: if the API reports granted, trust it
   const status = systemPreferences.getMediaAccessStatus('screen')
   if (status === 'granted') return true
 
+  // Functional test: attempt an actual capture to verify permission
+  // getMediaAccessStatus is unreliable with ad-hoc signed apps
+  try {
+    const sources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: { width: 1, height: 1 }
+    })
+    const hasValidSource = sources.some((source) => !source.thumbnail.isEmpty())
+    if (hasValidSource) return true
+  } catch {
+    // Capture failed — permission is genuinely missing
+  }
+
+  // Permission truly not granted — show dialog
   const result = await dialog.showMessageBox({
     type: 'warning',
     title: 'Screen Recording Permission Required',
