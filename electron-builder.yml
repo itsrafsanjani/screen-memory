@@ -12,6 +12,10 @@ files:
 extraResources:
   - from: swift-ocr/.build/release/screen-memory-ocr
     to: bin/screen-memory-ocr
+  - from: resources/iconTemplate.png
+    to: iconTemplate.png
+  - from: resources/iconTemplate@2x.png
+    to: iconTemplate@2x.png
 asarUnpack:
   - resources/**
   - node_modules/better-sqlite3/**
