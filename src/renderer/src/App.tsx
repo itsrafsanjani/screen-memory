@@ -146,8 +146,8 @@ function App(): React.JSX.Element {
     <TooltipProvider>
       <div className="h-screen flex flex-col bg-background">
         {/* Toolbar */}
-        <div className="drag-region grid grid-cols-[1fr_auto_1fr] items-center pl-[80px] pr-4 py-2.5 border-b border-border/60">
-          <div className="justify-self-start flex items-center gap-3">
+        <div className="drag-region relative flex items-center justify-between pl-[80px] pr-4 py-2.5 border-b border-border/60">
+          <div className="flex items-center gap-3">
             <Badge
               variant="secondary"
               className={`no-drag cursor-pointer px-2.5 py-1 ${isRecording ? 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400' : ''}`}
@@ -185,7 +185,7 @@ function App(): React.JSX.Element {
             </div>
           </div>
 
-          <div className="no-drag">
+          <div className="no-drag absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
             <DayPicker
               currentDate={currentDate}
               hasPrevious={hasPreviousDate}
@@ -195,7 +195,7 @@ function App(): React.JSX.Element {
             />
           </div>
 
-          <div className="no-drag justify-self-end flex items-center gap-2">
+          <div className="no-drag flex items-center gap-2">
             {viewMode === 'timeline' && (
               <>
                 <SearchBar
