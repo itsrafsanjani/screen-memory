@@ -1,6 +1,5 @@
 import {
   app,
-  desktopCapturer,
   ipcMain,
   Menu,
   net,
@@ -66,11 +65,13 @@ function updateTrayMenu(): void {
     { type: 'separator' },
     {
       label: isRecording ? 'Pause Recording' : 'Start Recording',
-      click: () => {
+      click: async () => {
         if (isRecording) {
           capture.stop()
-        } else {
+        } else if (hasScreenRecordingPermission()) {
           capture.start()
+        } else {
+          await promptForScreenRecordingPermission()
         }
         updateTrayMenu()
       }
@@ -126,9 +127,13 @@ function registerIpcHandlers(): void {
   })
 
   // --- Capture handlers ---
-  ipcMain.handle('start-capture', () => {
-    capture.start()
-    updateTrayMenu()
+  ipcMain.handle('start-capture', async () => {
+    if (hasScreenRecordingPermission()) {
+      capture.start()
+      updateTrayMenu()
+    } else {
+      await promptForScreenRecordingPermission()
+    }
   })
 
   ipcMain.handle('stop-capture', () => {
@@ -217,45 +222,28 @@ function registerProtocol(): void {
   })
 }
 
-async function checkScreenRecordingPermission(): Promise<boolean> {
+function hasScreenRecordingPermission(): boolean {
   if (process.platform !== 'darwin') return true
+  return systemPreferences.getMediaAccessStatus('screen') === 'granted'
+}
 
-  // Fast path: if the API reports granted, trust it
-  const status = systemPreferences.getMediaAccessStatus('screen')
-  if (status === 'granted') return true
-
-  // Functional test: attempt an actual capture to verify permission
-  // getMediaAccessStatus is unreliable with ad-hoc signed apps
-  try {
-    const sources = await desktopCapturer.getSources({
-      types: ['screen'],
-      thumbnailSize: { width: 1, height: 1 }
-    })
-    const hasValidSource = sources.some((source) => !source.thumbnail.isEmpty())
-    if (hasValidSource) return true
-  } catch {
-    // Capture failed — permission is genuinely missing
-  }
-
-  // Permission truly not granted — show dialog
+async function promptForScreenRecordingPermission(): Promise<void> {
+  const { shell } = await import('electron')
   const result = await dialog.showMessageBox({
     type: 'warning',
     title: 'Screen Recording Permission Required',
     message: 'Screen Memory needs screen recording permission to capture screenshots.',
     detail:
       'Please go to System Settings > Privacy & Security > Screen Recording and enable Screen Memory.',
-    buttons: ['Open System Settings', 'Quit'],
+    buttons: ['Open System Settings', 'Cancel'],
     defaultId: 0
   })
 
   if (result.response === 0) {
-    const { shell } = await import('electron')
     shell.openExternal(
       'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'
     )
   }
-
-  return false
 }
 
 function createApplicationMenu(): void {
@@ -450,9 +438,8 @@ app.whenReady().then(async () => {
 
   autoUpdater.checkForUpdates()
 
-  // Check permission and start capture
-  const hasPermission = await checkScreenRecordingPermission()
-  if (hasPermission) {
+  // Auto-start capture only when permission is already granted (no probing)
+  if (hasScreenRecordingPermission()) {
     capture.start()
     updateTrayMenu()
   }
