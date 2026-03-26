@@ -44,25 +44,12 @@ let gitService: GitService
 let ocrService: OcrService
 let aiService: AiService
 
-function createTrayIcon(recording: boolean): Electron.NativeImage {
+function loadTrayIcon(): Electron.NativeImage {
   const iconPath = app.isPackaged
     ? join(process.resourcesPath, 'iconTemplate.png')
     : join(__dirname, '../../resources/iconTemplate.png')
 
-  const img = nativeImage.createFromPath(iconPath).resize({ width: 22, height: 22 })
-
-  if (!recording) {
-    // Dim the icon for paused state by reducing alpha
-    const size = img.getSize()
-    const bitmap = img.toBitmap()
-    for (let i = 3; i < bitmap.length; i += 4) {
-      bitmap[i] = Math.round(bitmap[i] * 0.4)
-    }
-    const dimmed = nativeImage.createFromBitmap(bitmap, size)
-    dimmed.setTemplateImage(true)
-    return dimmed
-  }
-
+  const img = nativeImage.createFromPath(iconPath)
   img.setTemplateImage(true)
   return img
 }
@@ -70,8 +57,6 @@ function createTrayIcon(recording: boolean): Electron.NativeImage {
 function updateTrayMenu(): void {
   if (!tray) return
   const isRecording = capture.isRunning()
-
-  tray.setImage(createTrayIcon(isRecording))
 
   const contextMenu = Menu.buildFromTemplate([
     {
@@ -418,7 +403,7 @@ app.whenReady().then(async () => {
   registerIpcHandlers()
 
   // Create tray
-  tray = new Tray(createTrayIcon(false))
+  tray = new Tray(loadTrayIcon())
   tray.setToolTip('Screen Memory')
   tray.on('click', () => toggleTimelineWindow())
   updateTrayMenu()

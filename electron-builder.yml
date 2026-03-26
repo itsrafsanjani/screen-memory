@@ -16,6 +16,8 @@ extraResources:
     to: iconTemplate.png
   - from: resources/iconTemplate@2x.png
     to: iconTemplate@2x.png
+  - from: resources/iconTemplate@3x.png
+    to: iconTemplate@3x.png
 asarUnpack:
   - resources/**
   - node_modules/better-sqlite3/**
