@@ -39,24 +39,24 @@ xattr -cr /Applications/Screen\ Memory.app
 ### Install
 
 ```bash
-$ pnpm install
+pnpm install
 ```
 
 ### Development
 
 ```bash
-$ pnpm run dev
+pnpm run dev
 ```
 
 ### Build
 
 ```bash
 # For windows
-$ pnpm run build:win
+pnpm run build:win
 
 # For macOS
-$ pnpm run build:mac
+pnpm run build:mac
 
 # For Linux
-$ pnpm run build:linux
+pnpm run build:linux
 ```
