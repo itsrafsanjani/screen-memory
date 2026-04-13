@@ -5,6 +5,7 @@ This document describes the release process for Screen Memory.
 ## Overview
 
 Screen Memory is distributed via:
+
 - **GitHub Releases** - Primary distribution channel with auto-updates
 - **Homebrew Cask** - For macOS users who prefer package managers
 
@@ -59,6 +60,7 @@ git push origin v0.0.1
 ```
 
 The `.github/workflows/release.yml` workflow will automatically:
+
 - Build the Swift OCR binary
 - Build the Electron app for macOS ARM64
 - Ad-hoc sign the app bundle
@@ -85,6 +87,7 @@ gh release edit v0.0.1 --draft=false -R itsrafsanjani/screen-memory
 ```
 
 Verify the release assets:
+
 - `Screen-Memory-{version}-arm64.dmg`
 - `Screen-Memory-{version}-arm64.zip`
 - `latest-mac.yml` (required for auto-updates)
@@ -164,6 +167,7 @@ brew install --cask screen-memory
 ## Versioning
 
 This project follows [Semantic Versioning](https://semver.org/):
+
 - **MAJOR** - Incompatible API changes
 - **MINOR** - New functionality (backwards compatible)
 - **PATCH** - Bug fixes (backwards compatible)
@@ -173,11 +177,13 @@ This project follows [Semantic Versioning](https://semver.org/):
 ### Release Workflow Fails
 
 Check the GitHub Actions logs for errors:
+
 ```bash
 gh run view <run-id> -R itsrafsanjani/screen-memory --log
 ```
 
 Common issues:
+
 - **Swift build failure** - Ensure macOS runner has Xcode installed
 - **Signing issues** - Check entitlements file exists at `build/entitlements.mac.plist`
 - **Publishing failure** - Verify `GITHUB_TOKEN` has `contents: write` permission
@@ -193,6 +199,7 @@ If users report installation issues:
 ### Auto-Updater Not Working
 
 The auto-updater requires:
+
 1. `latest-mac.yml` in the GitHub release
 2. Correct `electron-builder.yml` publish configuration
 3. Valid version comparison (new version > current version)

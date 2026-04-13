@@ -27,8 +27,19 @@ export function useTimeline(): UseTimelineReturn {
   const { screenshots, dayBounds, loading } = useScreenshots(currentDate)
 
   useEffect(() => {
-    window.electronAPI.getAvailableDates().then(setAvailableDates).catch(console.error)
-  }, [])
+    window.electronAPI
+      .getAvailableDates()
+      .then((dates) => {
+        setAvailableDates(dates)
+        // If current date has no screenshots, jump to most recent date that does
+        if (dates.length > 0 && !dates.includes(currentDate)) {
+          setCurrentDate(dates[0]) // dates[0] is the most recent (DESC order)
+          setCurrentTimestamp(null)
+          setInitializedDate(null)
+        }
+      })
+      .catch(console.error)
+  }, [currentDate])
 
   // Set initial timestamp when a new day's bounds load
   useEffect(() => {
