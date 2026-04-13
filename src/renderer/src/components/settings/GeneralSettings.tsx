@@ -1,6 +1,13 @@
 import { Label } from '@/components/ui/label'
+import { useEffect, useState } from 'react'
 
 export function GeneralSettings(): React.JSX.Element {
+  const [version, setVersion] = useState('0.0.1')
+
+  useEffect(() => {
+    window.electronAPI.getAppVersion().then(setVersion)
+  }, [])
+
   return (
     <div className="space-y-4">
       <h3 className="text-sm font-medium">General</h3>
@@ -15,7 +22,7 @@ export function GeneralSettings(): React.JSX.Element {
 
       <div className="space-y-2">
         <Label>Version</Label>
-        <p className="text-sm font-mono text-muted-foreground">1.0.0</p>
+        <p className="text-sm font-mono text-muted-foreground">{version}</p>
       </div>
     </div>
   )

@@ -91,4 +91,7 @@ export interface ElectronAPI {
 
   // Events from main
   onOpenSettings(cb: () => void): () => void
+
+  // App info
+  getAppVersion(): Promise<string>
 }

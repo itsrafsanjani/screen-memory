@@ -100,6 +100,11 @@ const api = {
     const handler = (): void => cb()
     ipcRenderer.on('open-settings', handler)
     return () => ipcRenderer.removeListener('open-settings', handler)
+  },
+
+  // App info
+  getAppVersion(): Promise<string> {
+    return ipcRenderer.invoke('get-app-version')
   }
 }
 

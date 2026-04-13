@@ -212,6 +212,11 @@ function registerIpcHandlers(): void {
   ipcMain.handle('generate-summary', async (e, startMs: number, endMs: number) => {
     await aiService.streamSummary(startMs, endMs, e.sender)
   })
+
+  // App info
+  ipcMain.handle('get-app-version', () => {
+    return app.getVersion()
+  })
 }
 
 function registerProtocol(): void {
