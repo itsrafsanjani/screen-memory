@@ -72,13 +72,45 @@ export class DatabaseService {
 
       CREATE TABLE IF NOT EXISTS ocr_results (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        screenshot_id INTEGER NOT NULL,
+        screenshot_id INTEGER,
+        timestamp INTEGER NOT NULL,
+        display_id TEXT NOT NULL,
+        is_idle INTEGER DEFAULT 0,
         text TEXT NOT NULL,
-        confidence REAL DEFAULT 0,
-        FOREIGN KEY (screenshot_id) REFERENCES screenshots(id) ON DELETE CASCADE
+        confidence REAL DEFAULT 0
       );
       CREATE INDEX IF NOT EXISTS idx_ocr_screenshot ON ocr_results(screenshot_id);
+      CREATE INDEX IF NOT EXISTS idx_ocr_timestamp ON ocr_results(timestamp);
     `)
+
+    this.migrate()
+  }
+
+  private migrate(): void {
+    const cols = this.db.prepare('PRAGMA table_info(ocr_results)').all() as { name: string }[]
+    if (cols.some((c) => c.name === 'timestamp')) return
+
+    this.db.transaction(() => {
+      this.db.exec(`
+        CREATE TABLE ocr_results_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          screenshot_id INTEGER,
+          timestamp INTEGER NOT NULL,
+          display_id TEXT NOT NULL,
+          is_idle INTEGER DEFAULT 0,
+          text TEXT NOT NULL,
+          confidence REAL DEFAULT 0
+        );
+        INSERT INTO ocr_results_new (id, screenshot_id, timestamp, display_id, is_idle, text, confidence)
+        SELECT o.id, o.screenshot_id, s.timestamp, s.display_id, s.is_idle, o.text, o.confidence
+        FROM ocr_results o
+        INNER JOIN screenshots s ON s.id = o.screenshot_id;
+        DROP TABLE ocr_results;
+        ALTER TABLE ocr_results_new RENAME TO ocr_results;
+        CREATE INDEX IF NOT EXISTS idx_ocr_screenshot ON ocr_results(screenshot_id);
+        CREATE INDEX IF NOT EXISTS idx_ocr_timestamp ON ocr_results(timestamp);
+      `)
+    })()
   }
 
   // --- Screenshots ---
@@ -268,10 +300,20 @@ export class DatabaseService {
 
   // --- OCR ---
 
-  insertOcrResult(screenshotId: number, text: string, confidence: number): void {
+  insertOcrResult(record: {
+    screenshot_id: number
+    timestamp: number
+    display_id: string
+    is_idle: boolean
+    text: string
+    confidence: number
+  }): void {
     this.db
-      .prepare('INSERT INTO ocr_results (screenshot_id, text, confidence) VALUES (?, ?, ?)')
-      .run(screenshotId, text, confidence)
+      .prepare(
+        `INSERT INTO ocr_results (screenshot_id, timestamp, display_id, is_idle, text, confidence)
+         VALUES (@screenshot_id, @timestamp, @display_id, @is_idle, @text, @confidence)`
+      )
+      .run({ ...record, is_idle: record.is_idle ? 1 : 0 })
   }
 
   getOcrByScreenshotId(screenshotId: number): { text: string; confidence: number } | null {
@@ -281,42 +323,60 @@ export class DatabaseService {
     return row ?? null
   }
 
+  getOcrByTimeRange(
+    startMs: number,
+    endMs: number
+  ): { timestamp: number; text: string; is_idle: number }[] {
+    return this.db
+      .prepare(
+        `SELECT timestamp, text, is_idle FROM ocr_results
+         WHERE timestamp >= ? AND timestamp <= ?
+         ORDER BY timestamp ASC`
+      )
+      .all(startMs, endMs) as { timestamp: number; text: string; is_idle: number }[]
+  }
+
+  deleteOcrOlderThan(timestampMs: number): number {
+    const result = this.db.prepare('DELETE FROM ocr_results WHERE timestamp < ?').run(timestampMs)
+    return result.changes
+  }
+
   searchOcr(
     query: string,
     startMs?: number,
     endMs?: number
   ): {
-    screenshot_id: number
+    screenshot_id: number | null
     timestamp: number
     text_snippet: string
     display_id: string
-    file_path: string
+    file_path: string | null
   }[] {
     let sql = `
-      SELECT o.screenshot_id, s.timestamp, o.text as text_snippet, s.display_id, s.file_path
+      SELECT o.screenshot_id, o.timestamp, o.text as text_snippet, o.display_id, s.file_path
       FROM ocr_results o
-      JOIN screenshots s ON o.screenshot_id = s.id
+      LEFT JOIN screenshots s ON o.screenshot_id = s.id
       WHERE o.text LIKE ?
     `
     const params: (string | number)[] = [`%${query}%`]
 
     if (startMs !== undefined) {
-      sql += ' AND s.timestamp >= ?'
+      sql += ' AND o.timestamp >= ?'
       params.push(startMs)
     }
     if (endMs !== undefined) {
-      sql += ' AND s.timestamp <= ?'
+      sql += ' AND o.timestamp <= ?'
       params.push(endMs)
     }
 
-    sql += ' ORDER BY s.timestamp DESC LIMIT 100'
+    sql += ' ORDER BY o.timestamp DESC LIMIT 100'
 
     return this.db.prepare(sql).all(...params) as {
-      screenshot_id: number
+      screenshot_id: number | null
       timestamp: number
       text_snippet: string
       display_id: string
-      file_path: string
+      file_path: string | null
     }[]
   }
 

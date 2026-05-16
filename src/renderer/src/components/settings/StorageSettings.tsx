@@ -40,6 +40,21 @@ export function StorageSettings({ getSetting, updateSetting }: Props): React.JSX
         </p>
       </div>
 
+      <div className="space-y-2">
+        <Label>OCR Text Retention (days)</Label>
+        <Input
+          type="number"
+          min="1"
+          value={getSetting('storage.ocrRetentionDays', '90')}
+          onChange={(e) => updateSetting('storage.ocrRetentionDays', e.target.value)}
+          className="w-24"
+        />
+        <p className="text-xs text-muted-foreground">
+          OCR text is kept in the database after screenshots are deleted, so summaries work for
+          older periods (default: 90 days).
+        </p>
+      </div>
+
       <div className="pt-2">
         <Label>Current Usage</Label>
         <p className="text-sm font-mono mt-1">

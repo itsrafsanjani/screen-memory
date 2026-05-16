@@ -14,7 +14,13 @@ export class CaptureService {
   private storage: StorageService
   private idleDetector: IdleDetector
   private onStatusChanged?: (running: boolean) => void
-  private onScreenshotCaptured?: (screenshotId: number, absolutePath: string) => void
+  private onScreenshotCaptured?: (job: {
+    screenshotId: number
+    absolutePath: string
+    timestamp: number
+    displayId: string
+    isIdle: boolean
+  }) => void
 
   private activeIntervalMs = DEFAULT_ACTIVE_INTERVAL_MS
   private idleIntervalMs = DEFAULT_IDLE_INTERVAL_MS
@@ -30,7 +36,15 @@ export class CaptureService {
     this.onStatusChanged = cb
   }
 
-  setCaptureCallback(cb: (screenshotId: number, absolutePath: string) => void): void {
+  setCaptureCallback(
+    cb: (job: {
+      screenshotId: number
+      absolutePath: string
+      timestamp: number
+      displayId: string
+      isIdle: boolean
+    }) => void
+  ): void {
     this.onScreenshotCaptured = cb
   }
 
@@ -105,7 +119,13 @@ export class CaptureService {
 
         if (!idle && this.onScreenshotCaptured) {
           const absolutePath = this.storage.getAbsolutePath(relativePath)
-          this.onScreenshotCaptured(screenshotId, absolutePath)
+          this.onScreenshotCaptured({
+            screenshotId,
+            absolutePath,
+            timestamp,
+            displayId,
+            isIdle: idle
+          })
         }
       }
     } catch (err) {

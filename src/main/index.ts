@@ -355,20 +355,32 @@ app.whenReady().then(async () => {
     quality ? parseInt(quality, 10) : undefined
   )
 
-  // Auto-cleanup old data
-  const retentionDaysSetting = db.getSetting('storage.retentionDays')
-  const retentionDays = retentionDaysSetting ? parseInt(retentionDaysSetting, 10) : 7
-  const removedDirs = storage.cleanupOldData(retentionDays)
+  // Auto-cleanup old data — stage 1: screenshots (files + DB rows)
+  const screenshotRetentionDaysSetting = db.getSetting('storage.retentionDays')
+  const screenshotRetentionDays = screenshotRetentionDaysSetting
+    ? parseInt(screenshotRetentionDaysSetting, 10)
+    : 7
+  const screenshotCutoff = Date.now() - screenshotRetentionDays * 24 * 60 * 60 * 1000
+  const removedDirs = storage.cleanupOldData(screenshotRetentionDays)
   if (removedDirs.length > 0) {
-    const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000
-    db.deleteOlderThan(cutoff)
-    console.log('Cleaned up old data:', removedDirs)
+    db.deleteOlderThan(screenshotCutoff)
+    console.log('Cleaned up old screenshots:', removedDirs)
+  }
+
+  // Stage 2: OCR text (kept longer than screenshots so summaries retain context)
+  const ocrRetentionDaysSetting = db.getSetting('storage.ocrRetentionDays')
+  const ocrRetentionDays = ocrRetentionDaysSetting ? parseInt(ocrRetentionDaysSetting, 10) : 90
+  const effectiveOcrDays = Math.max(ocrRetentionDays, screenshotRetentionDays)
+  const ocrCutoff = Date.now() - effectiveOcrDays * 24 * 60 * 60 * 1000
+  const deletedOcr = db.deleteOcrOlderThan(ocrCutoff)
+  if (deletedOcr > 0) {
+    console.log(`Cleaned up ${deletedOcr} OCR rows`)
   }
 
   // Connect OCR to capture pipeline
   if (ocrService.isAvailable()) {
-    capture.setCaptureCallback((screenshotId, absolutePath) => {
-      ocrService.enqueue(screenshotId, absolutePath)
+    capture.setCaptureCallback((job) => {
+      ocrService.enqueue(job)
     })
     console.log('OCR service enabled')
   } else {

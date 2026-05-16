@@ -176,21 +176,18 @@ export class AiService {
     // Get sampled OCR text — one sample every 5 minutes
     const ocrSamples: { timestamp: number; text: string }[] = []
     const sampleInterval = 5 * 60 * 1000
-    const screenshots = this.db.getScreenshotsByTimeRange(startMs, endMs)
+    const ocrRows = this.db.getOcrByTimeRange(startMs, endMs)
 
     let lastSampledTs = 0
-    for (const shot of screenshots) {
-      if (shot.timestamp - lastSampledTs < sampleInterval) continue
-      if (shot.is_idle) continue
-
-      const ocr = this.db.getOcrByScreenshotId(shot.id)
-      if (ocr && ocr.text.trim()) {
-        ocrSamples.push({
-          timestamp: shot.timestamp,
-          text: ocr.text.slice(0, 200)
-        })
-        lastSampledTs = shot.timestamp
-      }
+    for (const row of ocrRows) {
+      if (row.timestamp - lastSampledTs < sampleInterval) continue
+      if (row.is_idle) continue
+      if (!row.text.trim()) continue
+      ocrSamples.push({
+        timestamp: row.timestamp,
+        text: row.text.slice(0, 200)
+      })
+      lastSampledTs = row.timestamp
     }
 
     const startDate = new Date(startMs).toLocaleDateString()

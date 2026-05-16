@@ -44,11 +44,11 @@ export interface OcrResult {
 }
 
 export interface OcrSearchResult {
-  screenshot_id: number
+  screenshot_id: number | null
   timestamp: number
   text_snippet: string
   display_id: string
-  file_path: string
+  file_path: string | null
 }
 
 export interface ElectronAPI {

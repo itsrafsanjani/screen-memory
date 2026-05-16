@@ -7,6 +7,9 @@ import { DatabaseService } from './database-service'
 interface OcrJob {
   screenshotId: number
   imagePath: string
+  timestamp: number
+  displayId: string
+  isIdle: boolean
 }
 
 export class OcrService {
@@ -39,8 +42,20 @@ export class OcrService {
     return existsSync(this.binaryPath)
   }
 
-  enqueue(screenshotId: number, absolutePath: string): void {
-    this.queue.push({ screenshotId, imagePath: absolutePath })
+  enqueue(job: {
+    screenshotId: number
+    absolutePath: string
+    timestamp: number
+    displayId: string
+    isIdle: boolean
+  }): void {
+    this.queue.push({
+      screenshotId: job.screenshotId,
+      imagePath: job.absolutePath,
+      timestamp: job.timestamp,
+      displayId: job.displayId,
+      isIdle: job.isIdle
+    })
     this.processNext()
   }
 
@@ -53,7 +68,14 @@ export class OcrService {
     try {
       const result = await this.runOcr(job.imagePath)
       if (result && result.text.trim().length > 0) {
-        this.db.insertOcrResult(job.screenshotId, result.text, result.confidence)
+        this.db.insertOcrResult({
+          screenshot_id: job.screenshotId,
+          timestamp: job.timestamp,
+          display_id: job.displayId,
+          is_idle: job.isIdle,
+          text: result.text,
+          confidence: result.confidence
+        })
       }
     } catch (err) {
       console.error(`OCR failed for screenshot ${job.screenshotId}:`, err)
