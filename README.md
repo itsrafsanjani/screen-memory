@@ -4,6 +4,11 @@ You finish a long day. You touched 6 repos, fixed 3 bugs, wrote bash scripts, re
 
 An Electron application with React and TypeScript to help you remember what you actually did today.
 
+## Preview
+
+<img width="3510" height="2256" alt="CleanShot 2026-04-22 at 22 51 57@2x" src="https://github.com/user-attachments/assets/a39901ba-cf3a-49bb-950a-83531dce9305" />
+
+
 ## Installation
 
 ### Homebrew (Recommended)
