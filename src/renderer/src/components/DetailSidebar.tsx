@@ -1,8 +1,9 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState } from 'react'
 import { GitBranch, ChevronRight, ChevronLeft, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { GitCommit, ScreenshotRecord } from '../../../types'
 import { formatTimeShort, findNearestScreenshot } from '../lib/time-utils'
+import { useOcrText } from '../hooks/useOcrText'
 
 interface Props {
   commits: GitCommit[]
@@ -10,52 +11,32 @@ interface Props {
   screenshots: ScreenshotRecord[]
 }
 
+const NEARBY_COMMIT_RANGE_MS = 5 * 60 * 1000
+const OCR_SNIPPET_LIMIT = 500
+
 export function DetailSidebar({
   commits,
   currentTimestamp,
   screenshots
 }: Props): React.JSX.Element {
   const [collapsed, setCollapsed] = useState(false)
-  const [ocrText, setOcrText] = useState<string | null>(null)
 
-  // Commits within +/- 5 minutes of current playhead
   const nearbyCommits = useMemo(() => {
     if (!currentTimestamp) return []
-    const range = 5 * 60 * 1000
     return commits.filter(
-      (c) => c.timestamp >= currentTimestamp - range && c.timestamp <= currentTimestamp + range
+      (c) =>
+        c.timestamp >= currentTimestamp - NEARBY_COMMIT_RANGE_MS &&
+        c.timestamp <= currentTimestamp + NEARBY_COMMIT_RANGE_MS
     )
   }, [commits, currentTimestamp])
 
-  // Load OCR text for current screenshot
   const currentScreenshotId = useMemo(() => {
     if (!currentTimestamp || screenshots.length === 0) return null
     const idx = findNearestScreenshot(screenshots, currentTimestamp)
     return idx >= 0 ? screenshots[idx].id : null
   }, [currentTimestamp, screenshots])
 
-  useEffect(() => {
-    let cancelled = false
-
-    const fetchOcr = async (): Promise<void> => {
-      if (currentScreenshotId === null) {
-        setOcrText(null)
-        return
-      }
-      try {
-        const text = await window.electronAPI.getOcrText(currentScreenshotId)
-        if (!cancelled) setOcrText(text)
-      } catch {
-        if (!cancelled) setOcrText(null)
-      }
-    }
-
-    fetchOcr()
-
-    return (): void => {
-      cancelled = true
-    }
-  }, [currentScreenshotId])
+  const ocrText = useOcrText(currentScreenshotId)
 
   if (collapsed) {
     return (
@@ -78,8 +59,7 @@ export function DetailSidebar({
       </div>
 
       <div className="flex-1 overflow-y-auto p-3 space-y-4">
-        {/* Git commits section */}
-        {nearbyCommits.length > 0 && (
+        {nearbyCommits.length > 0 ? (
           <div>
             <div className="flex items-center gap-1.5 mb-2">
               <GitBranch className="h-3.5 w-3.5 text-git-commit" />
@@ -104,28 +84,25 @@ export function DetailSidebar({
               ))}
             </div>
           </div>
-        )}
-
-        {nearbyCommits.length === 0 && (
+        ) : (
           <div className="text-xs text-muted-foreground">
             <GitBranch className="h-3.5 w-3.5 inline mr-1" />
             No commits near this time
           </div>
         )}
 
-        {/* OCR text section */}
-        {ocrText && (
+        {ocrText ? (
           <div>
             <div className="flex items-center gap-1.5 mb-2">
               <FileText className="h-3.5 w-3.5" />
               <span className="text-xs font-medium">Screen Text</span>
             </div>
-            <div className="rounded-lg border border-border p-3 text-xs text-muted-foreground max-h-[200px] overflow-y-auto whitespace-pre-wrap break-words">
-              {ocrText.slice(0, 500)}
-              {ocrText.length > 500 && '...'}
+            <div className="rounded-lg border border-border p-3 text-xs text-muted-foreground max-h-[200px] overflow-y-auto whitespace-pre-wrap wrap-break-word">
+              {ocrText.slice(0, OCR_SNIPPET_LIMIT)}
+              {ocrText.length > OCR_SNIPPET_LIMIT ? '...' : null}
             </div>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   )

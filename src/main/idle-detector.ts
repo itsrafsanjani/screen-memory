@@ -1,6 +1,5 @@
 import { powerMonitor } from 'electron'
-
-const IDLE_THRESHOLD_SECONDS = 120
+import { IDLE_THRESHOLD_SECONDS } from '../shared/constants'
 
 export class IdleDetector {
   isIdle(): boolean {

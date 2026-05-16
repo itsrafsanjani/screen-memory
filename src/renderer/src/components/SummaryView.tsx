@@ -1,65 +1,40 @@
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Sparkles, Loader2, CalendarIcon, Copy, Check } from 'lucide-react'
 import { useSummary } from '../hooks/useSummary'
+import { useSummaryPeriod, type SummaryPeriod } from '../hooks/useSummaryPeriod'
 
 interface Props {
   currentDate: string
 }
 
-type Period = 'today' | 'yesterday' | 'week' | 'custom'
+const PRESET_PERIODS = ['today', 'yesterday', 'week'] as const
+type PresetPeriod = (typeof PRESET_PERIODS)[number]
+
+const PRESET_LABELS: Record<PresetPeriod, string> = {
+  today: 'Today',
+  yesterday: 'Yesterday',
+  week: 'This Week'
+}
+
+const COPY_RESET_MS = 2000
 
 export function SummaryView({ currentDate }: Props): React.JSX.Element {
-  const [period, setPeriod] = useState<Period>('today')
-  const [customDate, setCustomDate] = useState<Date | undefined>()
-  const [popoverOpen, setPopoverOpen] = useState(false)
+  const {
+    period,
+    setPeriod,
+    customDate,
+    setCustomDate,
+    popoverOpen,
+    setPopoverOpen,
+    startMs,
+    endMs
+  } = useSummaryPeriod(currentDate)
   const [copied, setCopied] = useState(false)
   const { text, loading, error, generate } = useSummary()
-
-  const { startMs, endMs } = useMemo(() => {
-    if (period === 'custom' && customDate) {
-      const dayStart = new Date(
-        customDate.getFullYear(),
-        customDate.getMonth(),
-        customDate.getDate(),
-        0,
-        0,
-        0,
-        0
-      ).getTime()
-      const dayEnd = new Date(
-        customDate.getFullYear(),
-        customDate.getMonth(),
-        customDate.getDate(),
-        23,
-        59,
-        59,
-        999
-      ).getTime()
-      return { startMs: dayStart, endMs: dayEnd }
-    }
-
-    const [year, month, day] = currentDate.split('-').map(Number)
-    const dayStart = new Date(year, month - 1, day, 0, 0, 0, 0).getTime()
-    const dayEnd = new Date(year, month - 1, day, 23, 59, 59, 999).getTime()
-
-    switch (period) {
-      case 'yesterday': {
-        const ys = dayStart - 24 * 60 * 60 * 1000
-        const ye = dayEnd - 24 * 60 * 60 * 1000
-        return { startMs: ys, endMs: ye }
-      }
-      case 'week': {
-        const ws = dayStart - 6 * 24 * 60 * 60 * 1000
-        return { startMs: ws, endMs: dayEnd }
-      }
-      default:
-        return { startMs: dayStart, endMs: dayEnd }
-    }
-  }, [currentDate, period, customDate])
 
   const handleGenerate = (): void => {
     setCopied(false)
@@ -71,11 +46,14 @@ export function SummaryView({ currentDate }: Props): React.JSX.Element {
     try {
       await navigator.clipboard.writeText(text)
       setCopied(true)
-      window.setTimeout(() => setCopied(false), 2000)
+      window.setTimeout(() => setCopied(false), COPY_RESET_MS)
     } catch {
       // Clipboard may be unavailable in restricted contexts
     }
   }
+
+  const customLabel =
+    period === 'custom' && customDate ? format(customDate, 'MMM d, yyyy') : 'Pick Date'
 
   return (
     <div className="flex-1 flex flex-col p-4 min-h-0">
@@ -87,15 +65,15 @@ export function SummaryView({ currentDate }: Props): React.JSX.Element {
 
       {/* Period selector */}
       <div className="flex items-center gap-2 mb-4 flex-wrap">
-        {(['today', 'yesterday', 'week'] as const).map((p) => (
+        {PRESET_PERIODS.map((preset) => (
           <Button
-            key={p}
-            variant={period === p ? 'default' : 'outline'}
+            key={preset}
+            variant={period === preset ? 'default' : 'outline'}
             size="sm"
             className="text-xs h-7"
-            onClick={() => setPeriod(p)}
+            onClick={() => setPeriod(preset as SummaryPeriod)}
           >
-            {p === 'today' ? 'Today' : p === 'yesterday' ? 'Yesterday' : 'This Week'}
+            {PRESET_LABELS[preset]}
           </Button>
         ))}
         <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
@@ -106,7 +84,7 @@ export function SummaryView({ currentDate }: Props): React.JSX.Element {
               className="text-xs h-7"
             >
               <CalendarIcon className="h-3 w-3 mr-1" />
-              {period === 'custom' && customDate ? format(customDate, 'MMM d, yyyy') : 'Pick Date'}
+              {customLabel}
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-auto p-0" align="start">
@@ -142,11 +120,11 @@ export function SummaryView({ currentDate }: Props): React.JSX.Element {
       </div>
 
       {/* Error */}
-      {error && (
+      {error ? (
         <div className="mb-4 p-3 rounded-md bg-destructive/10 text-destructive text-sm">
           {error}
         </div>
-      )}
+      ) : null}
 
       {/* Output */}
       <div className="flex-1 flex flex-col min-h-0 rounded-md border border-border bg-card overflow-hidden">

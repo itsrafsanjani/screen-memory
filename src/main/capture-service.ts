@@ -1,16 +1,16 @@
 import { desktopCapturer, screen } from 'electron'
-import { DatabaseService } from './database-service'
 import { StorageService } from './storage-service'
 import { IdleDetector } from './idle-detector'
-
-const DEFAULT_ACTIVE_INTERVAL_MS = 5000
-const DEFAULT_IDLE_INTERVAL_MS = 30000
-const DEFAULT_JPEG_QUALITY = 65
+import { insertScreenshot } from './db/repositories/screenshots'
+import {
+  DEFAULT_ACTIVE_INTERVAL_MS,
+  DEFAULT_IDLE_INTERVAL_MS,
+  DEFAULT_JPEG_QUALITY
+} from '../shared/constants'
 
 export class CaptureService {
   private timer: ReturnType<typeof setTimeout> | null = null
   private running = false
-  private db: DatabaseService
   private storage: StorageService
   private idleDetector: IdleDetector
   private onStatusChanged?: (running: boolean) => void
@@ -26,8 +26,7 @@ export class CaptureService {
   private idleIntervalMs = DEFAULT_IDLE_INTERVAL_MS
   private jpegQuality = DEFAULT_JPEG_QUALITY
 
-  constructor(db: DatabaseService, storage: StorageService) {
-    this.db = db
+  constructor(storage: StorageService) {
     this.storage = storage
     this.idleDetector = new IdleDetector()
   }
@@ -107,7 +106,7 @@ export class CaptureService {
 
         const relativePath = this.storage.saveImage(timestamp, displayId, jpegBuffer)
 
-        const screenshotId = this.db.insertScreenshot({
+        const screenshotId = insertScreenshot({
           timestamp,
           display_id: displayId,
           file_path: relativePath,

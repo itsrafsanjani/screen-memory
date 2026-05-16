@@ -2,7 +2,19 @@ import { execFile } from 'child_process'
 import { existsSync } from 'fs'
 import { basename, join } from 'path'
 import { homedir } from 'os'
-import { DatabaseService } from './database-service'
+import { insertGitCommit, insertGitRepo, getGitRepos, updateGitRepo } from './db/repositories/git'
+import { getSetting, setSetting } from './db/repositories/settings'
+import {
+  DEFAULT_GIT_SCAN_INTERVAL_MINUTES,
+  DEFAULT_GIT_POLL_INTERVAL_MINUTES,
+  GIT_POLL_STARTUP_DELAY_MS,
+  GIT_SCAN_TIMEOUT_MS,
+  GIT_REPO_CHECK_TIMEOUT_MS,
+  GIT_LOG_TIMEOUT_MS,
+  GIT_LOG_MAX_BUFFER,
+  GIT_INITIAL_HISTORY_DAYS,
+  MS_PER_DAY
+} from '../shared/constants'
 
 const DEFAULT_WATCH_DIRS = ['Projects', 'Code', 'Developer', 'Desktop', 'Documents'].map((d) =>
   join(homedir(), d)
@@ -10,15 +22,13 @@ const DEFAULT_WATCH_DIRS = ['Projects', 'Code', 'Developer', 'Desktop', 'Documen
 const EXCLUDE_PATTERNS = ['node_modules', '.Trash', 'Library', '.cache', '.npm']
 
 export class GitService {
-  private db: DatabaseService
   private scanTimer: ReturnType<typeof setInterval> | null = null
   private pollTimer: ReturnType<typeof setInterval> | null = null
 
-  constructor(db: DatabaseService) {
-    this.db = db
-  }
-
-  start(scanIntervalMinutes = 60, pollIntervalMinutes = 5): void {
+  start(
+    scanIntervalMinutes = DEFAULT_GIT_SCAN_INTERVAL_MINUTES,
+    pollIntervalMinutes = DEFAULT_GIT_POLL_INTERVAL_MINUTES
+  ): void {
     // Initial scan
     this.scanRepos().catch(console.error)
 
@@ -35,7 +45,7 @@ export class GitService {
     )
 
     // Poll once after a short delay for initial commits
-    setTimeout(() => this.pollAllRepos().catch(console.error), 5000)
+    setTimeout(() => this.pollAllRepos().catch(console.error), GIT_POLL_STARTUP_DELAY_MS)
   }
 
   stop(): void {
@@ -50,7 +60,7 @@ export class GitService {
   }
 
   async scanRepos(): Promise<void> {
-    const watchDirsStr = this.db.getSetting('git.watchDirs')
+    const watchDirsStr = getSetting('git.watchDirs')
     const watchDirs: string[] = watchDirsStr ? JSON.parse(watchDirsStr) : DEFAULT_WATCH_DIRS
 
     for (const dir of watchDirs) {
@@ -61,7 +71,7 @@ export class GitService {
         for (const gitDir of gitDirs) {
           const repoPath = gitDir.replace(/\/\.git$/, '')
           const repoName = basename(repoPath)
-          this.db.insertGitRepo({ path: repoPath, name: repoName })
+          insertGitRepo({ path: repoPath, name: repoName })
         }
       } catch (err) {
         console.error(`Error scanning ${dir}:`, err)
@@ -82,7 +92,7 @@ export class GitService {
         ...EXCLUDE_PATTERNS.flatMap((p) => ['-not', '-path', `*/${p}/*`])
       ]
 
-      execFile('find', args, { timeout: 30000 }, (err, stdout) => {
+      execFile('find', args, { timeout: GIT_SCAN_TIMEOUT_MS }, (err, stdout) => {
         if (err) {
           resolve([])
           return
@@ -97,7 +107,7 @@ export class GitService {
   }
 
   async pollAllRepos(): Promise<void> {
-    const repos = this.db.getGitRepos()
+    const repos = getGitRepos()
 
     for (const repo of repos) {
       if (repo.is_excluded) continue
@@ -105,7 +115,7 @@ export class GitService {
 
       try {
         await this.fetchCommits(repo.path, repo.name, repo.last_scanned)
-        this.db.updateGitRepo(repo.id, { last_scanned: Date.now() })
+        updateGitRepo(repo.id, { last_scanned: Date.now() })
       } catch (err) {
         console.error(`Error polling repo ${repo.path}:`, err)
       }
@@ -117,7 +127,7 @@ export class GitService {
       execFile(
         'git',
         ['-C', repoPath, 'config', 'user.email'],
-        { timeout: 5000 },
+        { timeout: GIT_REPO_CHECK_TIMEOUT_MS },
         (err, stdout) => {
           resolve(err ? '' : stdout.trim())
         }
@@ -130,19 +140,19 @@ export class GitService {
     repoName: string,
     lastScanned: number
   ): Promise<void> {
-    let authorEmail = this.db.getSetting('git.authorEmail')
+    let authorEmail = getSetting('git.authorEmail')
     if (!authorEmail) {
       authorEmail = await this.getGitUserEmail(repoPath)
       if (authorEmail) {
-        this.db.setSetting('git.authorEmail', authorEmail)
+        setSetting('git.authorEmail', authorEmail)
       }
     }
 
     return new Promise((resolve) => {
-      // If never scanned, only fetch last 30 days
+      // If never scanned, only fetch initial history window
       const since = lastScanned
         ? new Date(lastScanned).toISOString()
-        : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+        : new Date(Date.now() - GIT_INITIAL_HISTORY_DAYS * MS_PER_DAY).toISOString()
 
       const args = [
         '-C',
@@ -155,59 +165,81 @@ export class GitService {
         ...(authorEmail ? [`--author=${authorEmail}`] : [])
       ]
 
-      execFile('git', args, { timeout: 30000, maxBuffer: 10 * 1024 * 1024 }, (err, stdout) => {
-        if (err) {
-          resolve()
-          return
-        }
+      execFile(
+        'git',
+        args,
+        { timeout: GIT_LOG_TIMEOUT_MS, maxBuffer: GIT_LOG_MAX_BUFFER },
+        (err, stdout) => {
+          if (err) {
+            resolve()
+            return
+          }
 
-        const lines = stdout.trim().split('\n')
-        let currentCommit: {
-          hash: string
-          timestamp: number
-          authorName: string
-          authorEmail: string
-          message: string
-        } | null = null
+          const lines = stdout.trim().split('\n')
+          let currentCommit: {
+            hash: string
+            timestamp: number
+            authorName: string
+            authorEmail: string
+            message: string
+          } | null = null
 
-        for (const line of lines) {
-          if (!line.trim()) continue
+          for (const line of lines) {
+            if (!line.trim()) continue
 
-          // Check if this is a commit line (contains null byte separators)
-          if (line.includes('\0')) {
-            // Save previous commit if any
-            if (currentCommit) {
-              this.db.insertGitCommit({
+            // Check if this is a commit line (contains null byte separators)
+            if (line.includes('\0')) {
+              // Save previous commit if any
+              if (currentCommit) {
+                insertGitCommit({
+                  repo_path: repoPath,
+                  repo_name: repoName,
+                  commit_hash: currentCommit.hash,
+                  timestamp: currentCommit.timestamp * 1000, // Convert to ms
+                  author_name: currentCommit.authorName,
+                  author_email: currentCommit.authorEmail,
+                  message: currentCommit.message,
+                  files_changed: 0,
+                  insertions: 0,
+                  deletions: 0
+                })
+              }
+
+              const parts = line.split('\0')
+              if (parts.length >= 5) {
+                currentCommit = {
+                  hash: parts[0],
+                  timestamp: parseInt(parts[1], 10),
+                  authorName: parts[2],
+                  authorEmail: parts[3],
+                  message: parts[4]
+                }
+              }
+            } else if (currentCommit) {
+              // Parse shortstat line
+              const filesMatch = line.match(/(\d+) files? changed/)
+              const insMatch = line.match(/(\d+) insertions?/)
+              const delMatch = line.match(/(\d+) deletions?/)
+
+              insertGitCommit({
                 repo_path: repoPath,
                 repo_name: repoName,
                 commit_hash: currentCommit.hash,
-                timestamp: currentCommit.timestamp * 1000, // Convert to ms
+                timestamp: currentCommit.timestamp * 1000,
                 author_name: currentCommit.authorName,
                 author_email: currentCommit.authorEmail,
                 message: currentCommit.message,
-                files_changed: 0,
-                insertions: 0,
-                deletions: 0
+                files_changed: filesMatch ? parseInt(filesMatch[1], 10) : 0,
+                insertions: insMatch ? parseInt(insMatch[1], 10) : 0,
+                deletions: delMatch ? parseInt(delMatch[1], 10) : 0
               })
+              currentCommit = null
             }
+          }
 
-            const parts = line.split('\0')
-            if (parts.length >= 5) {
-              currentCommit = {
-                hash: parts[0],
-                timestamp: parseInt(parts[1], 10),
-                authorName: parts[2],
-                authorEmail: parts[3],
-                message: parts[4]
-              }
-            }
-          } else if (currentCommit) {
-            // Parse shortstat line
-            const filesMatch = line.match(/(\d+) files? changed/)
-            const insMatch = line.match(/(\d+) insertions?/)
-            const delMatch = line.match(/(\d+) deletions?/)
-
-            this.db.insertGitCommit({
+          // Don't forget the last commit if there was no shortstat after it
+          if (currentCommit) {
+            insertGitCommit({
               repo_path: repoPath,
               repo_name: repoName,
               commit_hash: currentCommit.hash,
@@ -215,32 +247,15 @@ export class GitService {
               author_name: currentCommit.authorName,
               author_email: currentCommit.authorEmail,
               message: currentCommit.message,
-              files_changed: filesMatch ? parseInt(filesMatch[1], 10) : 0,
-              insertions: insMatch ? parseInt(insMatch[1], 10) : 0,
-              deletions: delMatch ? parseInt(delMatch[1], 10) : 0
+              files_changed: 0,
+              insertions: 0,
+              deletions: 0
             })
-            currentCommit = null
           }
-        }
 
-        // Don't forget the last commit if there was no shortstat after it
-        if (currentCommit) {
-          this.db.insertGitCommit({
-            repo_path: repoPath,
-            repo_name: repoName,
-            commit_hash: currentCommit.hash,
-            timestamp: currentCommit.timestamp * 1000,
-            author_name: currentCommit.authorName,
-            author_email: currentCommit.authorEmail,
-            message: currentCommit.message,
-            files_changed: 0,
-            insertions: 0,
-            deletions: 0
-          })
+          resolve()
         }
-
-        resolve()
-      })
+      )
     })
   }
 }

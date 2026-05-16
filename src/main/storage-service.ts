@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { join } from 'path'
 import { mkdirSync, writeFileSync, existsSync, rmSync, readdirSync, statSync } from 'fs'
 import { format } from 'date-fns'
+import { MS_PER_DAY } from '../shared/constants'
 
 export class StorageService {
   private basePath: string
@@ -49,7 +50,7 @@ export class StorageService {
   }
 
   cleanupOldData(retentionDays: number): string[] {
-    const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000
+    const cutoff = Date.now() - retentionDays * MS_PER_DAY
     const cutoffDate = format(new Date(cutoff), 'yyyy-MM-dd')
     const removedDirs: string[] = []
 

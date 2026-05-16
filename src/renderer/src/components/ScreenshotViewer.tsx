@@ -38,7 +38,7 @@ function CrossfadeImage({ src, alt }: { src: string; alt: string }): React.JSX.E
         draggable={false}
       />
       {/* Next (loading/fading in) image */}
-      {nextSrc && (
+      {nextSrc ? (
         <img
           src={`screenmemory://${encodeURIComponent(nextSrc)}`}
           alt={alt}
@@ -51,7 +51,7 @@ function CrossfadeImage({ src, alt }: { src: string; alt: string }): React.JSX.E
           draggable={false}
           onLoad={handleLoad}
         />
-      )}
+      ) : null}
     </div>
   )
 }
@@ -88,7 +88,7 @@ export function ScreenshotViewer({
   return (
     <div className="flex-1 flex gap-2 p-4 min-h-0">
       {displayScreenshots
-        .sort((a, b) => a.display_id.localeCompare(b.display_id))
+        .toSorted((a, b) => a.display_id.localeCompare(b.display_id))
         .map((shot) => (
           <div key={shot.display_id} className="flex-1 flex items-center justify-center min-w-0">
             <CrossfadeImage src={shot.file_path} alt={`Display ${shot.display_id}`} />

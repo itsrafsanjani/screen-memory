@@ -1,110 +1,126 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { ScreenshotRecord, DayBounds, GitCommit, GitRepo, OcrSearchResult } from '../types'
+import { IPC } from '../shared/ipc-channels'
+import { unwrap, type Result } from '../shared/result'
+import type { MigrationProgress } from '../main/db/migration-runner'
+
+async function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
+  const result = (await ipcRenderer.invoke(channel, ...args)) as Result<T>
+  return unwrap(result)
+}
 
 const api = {
   // Screenshots
   getScreenshotsByDate(date: string): Promise<ScreenshotRecord[]> {
-    return ipcRenderer.invoke('get-screenshots-by-date', date)
+    return invoke(IPC.screenshots.getByDate, date)
   },
   getAvailableDates(): Promise<string[]> {
-    return ipcRenderer.invoke('get-available-dates')
+    return invoke(IPC.screenshots.getAvailableDates)
   },
-  getDayBounds(date: string): Promise<DayBounds> {
-    return ipcRenderer.invoke('get-day-bounds', date)
+  getDayBounds(date: string): Promise<DayBounds | null> {
+    return invoke(IPC.screenshots.getDayBounds, date)
   },
   getScreenshotsByTimeRange(start: number, end: number): Promise<ScreenshotRecord[]> {
-    return ipcRenderer.invoke('get-screenshots-by-time-range', start, end)
+    return invoke(IPC.screenshots.getByTimeRange, start, end)
   },
 
   // Capture
   startCapture(): Promise<void> {
-    return ipcRenderer.invoke('start-capture')
+    return invoke(IPC.capture.start)
   },
   stopCapture(): Promise<void> {
-    return ipcRenderer.invoke('stop-capture')
+    return invoke(IPC.capture.stop)
   },
   getCaptureStatus(): Promise<boolean> {
-    return ipcRenderer.invoke('get-capture-status')
+    return invoke(IPC.capture.getStatus)
   },
   onCaptureStatusChanged(cb: (status: boolean) => void): () => void {
     const handler = (_event: Electron.IpcRendererEvent, status: boolean): void => cb(status)
-    ipcRenderer.on('capture-status-changed', handler)
-    return () => ipcRenderer.removeListener('capture-status-changed', handler)
+    ipcRenderer.on(IPC.capture.statusChanged, handler)
+    return () => ipcRenderer.removeListener(IPC.capture.statusChanged, handler)
   },
 
   // Theme
   getNativeTheme(): Promise<boolean> {
-    return ipcRenderer.invoke('get-native-theme')
+    return invoke(IPC.theme.getNative)
   },
   onThemeChanged(cb: (isDark: boolean) => void): () => void {
     const handler = (_event: Electron.IpcRendererEvent, isDark: boolean): void => cb(isDark)
-    ipcRenderer.on('theme-changed', handler)
-    return () => ipcRenderer.removeListener('theme-changed', handler)
+    ipcRenderer.on(IPC.theme.changed, handler)
+    return () => ipcRenderer.removeListener(IPC.theme.changed, handler)
   },
 
   // Settings
   getAllSettings(): Promise<Record<string, string>> {
-    return ipcRenderer.invoke('get-all-settings')
+    return invoke(IPC.settings.getAll)
   },
   setSetting(key: string, value: string): Promise<void> {
-    return ipcRenderer.invoke('set-setting', key, value)
+    return invoke(IPC.settings.set, key, value)
   },
   getStorageUsage(): Promise<number> {
-    return ipcRenderer.invoke('get-storage-usage')
+    return invoke(IPC.settings.getStorageUsage)
   },
   openDirectoryDialog(): Promise<string | null> {
-    return ipcRenderer.invoke('open-directory-dialog')
+    return invoke(IPC.settings.openDirectoryDialog)
   },
 
   // Git
   getGitCommitsByDate(start: number, end: number): Promise<GitCommit[]> {
-    return ipcRenderer.invoke('get-git-commits-by-date', start, end)
+    return invoke(IPC.git.getCommitsByDate, start, end)
   },
   getGitRepos(): Promise<GitRepo[]> {
-    return ipcRenderer.invoke('get-git-repos')
+    return invoke(IPC.git.getRepos)
   },
   scanGitRepos(): Promise<void> {
-    return ipcRenderer.invoke('scan-git-repos')
+    return invoke(IPC.git.scanRepos)
   },
 
   // OCR
   searchOcr(query: string, startMs?: number, endMs?: number): Promise<OcrSearchResult[]> {
-    return ipcRenderer.invoke('search-ocr', query, startMs, endMs)
+    return invoke(IPC.ocr.search, query, startMs, endMs)
   },
   getOcrText(screenshotId: number): Promise<string | null> {
-    return ipcRenderer.invoke('get-ocr-text', screenshotId)
+    return invoke(IPC.ocr.getText, screenshotId)
   },
 
   // AI Summary
   generateSummary(startMs: number, endMs: number): Promise<void> {
-    return ipcRenderer.invoke('generate-summary', startMs, endMs)
+    return invoke(IPC.ai.generateSummary, startMs, endMs)
   },
   onSummaryChunk(cb: (chunk: string) => void): () => void {
     const handler = (_event: Electron.IpcRendererEvent, chunk: string): void => cb(chunk)
-    ipcRenderer.on('summary-chunk', handler)
-    return () => ipcRenderer.removeListener('summary-chunk', handler)
+    ipcRenderer.on(IPC.ai.summaryChunk, handler)
+    return () => ipcRenderer.removeListener(IPC.ai.summaryChunk, handler)
   },
   onSummaryDone(cb: () => void): () => void {
     const handler = (): void => cb()
-    ipcRenderer.on('summary-done', handler)
-    return () => ipcRenderer.removeListener('summary-done', handler)
+    ipcRenderer.on(IPC.ai.summaryDone, handler)
+    return () => ipcRenderer.removeListener(IPC.ai.summaryDone, handler)
   },
   onSummaryError(cb: (error: string) => void): () => void {
     const handler = (_event: Electron.IpcRendererEvent, error: string): void => cb(error)
-    ipcRenderer.on('summary-error', handler)
-    return () => ipcRenderer.removeListener('summary-error', handler)
+    ipcRenderer.on(IPC.ai.summaryError, handler)
+    return () => ipcRenderer.removeListener(IPC.ai.summaryError, handler)
   },
 
   // Events from main
   onOpenSettings(cb: () => void): () => void {
     const handler = (): void => cb()
-    ipcRenderer.on('open-settings', handler)
-    return () => ipcRenderer.removeListener('open-settings', handler)
+    ipcRenderer.on(IPC.app.openSettings, handler)
+    return () => ipcRenderer.removeListener(IPC.app.openSettings, handler)
+  },
+
+  // Migration
+  onMigrationProgress(cb: (progress: MigrationProgress) => void): () => void {
+    const handler = (_event: Electron.IpcRendererEvent, progress: MigrationProgress): void =>
+      cb(progress)
+    ipcRenderer.on(IPC.migration.progress, handler)
+    return () => ipcRenderer.removeListener(IPC.migration.progress, handler)
   },
 
   // App info
   getAppVersion(): Promise<string> {
-    return ipcRenderer.invoke('get-app-version')
+    return invoke(IPC.app.getVersion)
   }
 }
 

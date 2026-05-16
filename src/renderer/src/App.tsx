@@ -3,32 +3,40 @@ import { useTimeline } from './hooks/useTimeline'
 import { usePlayback } from './hooks/usePlayback'
 import { useGitCommits } from './hooks/useGitCommits'
 import { useSearch } from './hooks/useSearch'
-import { ScreenshotViewer } from './components/ScreenshotViewer'
-import { Timeline } from './components/Timeline'
+import { useTheme } from './hooks/useTheme'
+import { useCaptureStatus } from './hooks/useCaptureStatus'
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
+import { useMigrationStatus } from './hooks/useMigrationStatus'
 import { DayPicker } from './components/DayPicker'
 import { PlaybackControls } from './components/PlaybackControls'
-import { DetailSidebar } from './components/DetailSidebar'
 import { SearchBar } from './components/SearchBar'
 import { SettingsDialog } from './components/Settings'
 import { SummaryView } from './components/SummaryView'
+import { TimelineView } from './components/TimelineView'
+import { MigrationOverlay } from './components/MigrationOverlay'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Separator } from '@/components/ui/separator'
 import { Settings, Sparkles, Monitor } from 'lucide-react'
-
-function useTheme(): void {
-  useEffect(() => {
-    const apply = (isDark: boolean): void => {
-      document.documentElement.classList.toggle('dark', isDark)
-    }
-    window.electronAPI.getNativeTheme().then(apply)
-    const unsub = window.electronAPI.onThemeChanged(apply)
-    return unsub
-  }, [])
-}
+import type { ScreenshotRecord } from '../../types'
 
 type ViewMode = 'timeline' | 'summary'
+
+function gitCommitsToScreenshotEntries(
+  commits: ReturnType<typeof useGitCommits>
+): ScreenshotRecord[] {
+  return commits.map((c) => ({
+    id: -c.id,
+    timestamp: c.timestamp,
+    display_id: 'git-commit',
+    file_path: '',
+    width: 0,
+    height: 0,
+    file_size: 0,
+    is_idle: false
+  }))
+}
 
 function App(): React.JSX.Element {
   const {
@@ -46,19 +54,9 @@ function App(): React.JSX.Element {
 
   const gitCommits = useGitCommits(currentDate)
 
-  // Merge git commits into screenshots as active-state entries for timeline segments & navigation
   const screenshotsWithCommits = useMemo(() => {
     if (gitCommits.length === 0) return screenshots
-    const commitEntries = gitCommits.map((c) => ({
-      id: -c.id,
-      timestamp: c.timestamp,
-      display_id: 'git-commit',
-      file_path: '',
-      width: 0,
-      height: 0,
-      file_size: 0,
-      is_idle: false
-    }))
+    const commitEntries = gitCommitsToScreenshotEntries(gitCommits)
     return [...screenshots, ...commitEntries].sort((a, b) => a.timestamp - b.timestamp)
   }, [screenshots, gitCommits])
 
@@ -76,71 +74,27 @@ function App(): React.JSX.Element {
   const [hoverTimestamp, setHoverTimestamp] = useState<number | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('timeline')
   const [settingsOpen, setSettingsOpen] = useState(false)
-
   const { query, results, searching, search, clearSearch } = useSearch()
+  const { isRecording, toggleRecording } = useCaptureStatus()
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handler = (e: KeyboardEvent): void => {
-      const tag = (e.target as HTMLElement)?.tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
-
-      switch (e.key) {
-        case ' ':
-          e.preventDefault()
-          toggle()
-          break
-        case 'ArrowLeft':
-          e.preventDefault()
-          skipBackward()
-          break
-        case 'ArrowRight':
-          e.preventDefault()
-          skipForward()
-          break
-        case 'ArrowUp':
-          e.preventDefault()
-          cycleSpeedUp()
-          break
-        case 'ArrowDown':
-          e.preventDefault()
-          cycleSpeedDown()
-          break
-      }
-    }
-
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [toggle, skipForward, skipBackward, cycleSpeedUp, cycleSpeedDown])
-
-  const [isRecording, setIsRecording] = useState(false)
+  const migration = useMigrationStatus()
 
   useTheme()
+  useKeyboardShortcuts({ toggle, skipForward, skipBackward, cycleSpeedUp, cycleSpeedDown })
 
   useEffect(() => {
-    window.electronAPI.getCaptureStatus().then(setIsRecording)
-    const unsub = window.electronAPI.onCaptureStatusChanged(setIsRecording)
-    return unsub
+    return window.electronAPI.onOpenSettings(() => setSettingsOpen(true))
   }, [])
-
-  // Listen for settings open from tray menu
-  useEffect(() => {
-    const unsub = window.electronAPI.onOpenSettings(() => setSettingsOpen(true))
-    return unsub
-  }, [])
-
-  const toggleRecording = async (): Promise<void> => {
-    if (isRecording) {
-      await window.electronAPI.stopCapture()
-    } else {
-      await window.electronAPI.startCapture()
-    }
-  }
 
   const handleSearchResultClick = (timestamp: number): void => {
     setCurrentTimestamp(timestamp)
     clearSearch()
   }
+
+  const recordingBadgeClass = isRecording
+    ? 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400'
+    : ''
+  const recordingDotClass = isRecording ? 'bg-green-500 animate-pulse' : 'bg-muted-foreground/40'
 
   return (
     <TooltipProvider>
@@ -150,14 +104,12 @@ function App(): React.JSX.Element {
           <div className="flex items-center gap-3">
             <Badge
               variant="secondary"
-              className={`no-drag cursor-pointer px-2.5 py-1 ${isRecording ? 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400' : ''}`}
-              onClick={toggleRecording}
+              className={`no-drag cursor-pointer px-2.5 py-1 ${recordingBadgeClass}`}
+              onClick={() => void toggleRecording()}
               asChild
             >
               <button>
-                <span
-                  className={`w-1.5 h-1.5 rounded-full ${isRecording ? 'bg-green-500 animate-pulse' : 'bg-muted-foreground/40'}`}
-                />
+                <span className={`w-1.5 h-1.5 rounded-full ${recordingDotClass}`} />
                 {isRecording ? 'Recording' : 'Paused'}
               </button>
             </Badge>
@@ -196,7 +148,7 @@ function App(): React.JSX.Element {
           </div>
 
           <div className="no-drag flex items-center gap-2">
-            {viewMode === 'timeline' && (
+            {viewMode === 'timeline' ? (
               <>
                 <SearchBar
                   query={query}
@@ -216,7 +168,7 @@ function App(): React.JSX.Element {
                   onSpeedChange={setSpeed}
                 />
               </>
-            )}
+            ) : null}
             <Separator orientation="vertical" className="h-5" />
             <Button
               variant="ghost"
@@ -234,43 +186,25 @@ function App(): React.JSX.Element {
         {viewMode === 'summary' ? (
           <SummaryView currentDate={currentDate} />
         ) : (
-          <>
-            {/* Screenshot viewer + Detail sidebar */}
-            {loading ? (
-              <div className="flex-1 flex items-center justify-center text-muted-foreground">
-                Loading...
-              </div>
-            ) : (
-              <div className="flex-1 flex min-h-0">
-                <ScreenshotViewer
-                  screenshots={screenshots}
-                  currentTimestamp={currentTimestamp}
-                  hoverTimestamp={hoverTimestamp}
-                />
-                <DetailSidebar
-                  commits={gitCommits}
-                  currentTimestamp={currentTimestamp}
-                  screenshots={screenshots}
-                />
-              </div>
-            )}
-
-            {/* Timeline */}
-            <div className="border-t border-border/60 w-full">
-              <Timeline
-                screenshots={screenshotsWithCommits}
-                dayBounds={dayBounds}
-                currentTimestamp={currentTimestamp}
-                onSeek={setCurrentTimestamp}
-                onHoverTimestamp={setHoverTimestamp}
-                gitCommits={gitCommits}
-              />
-            </div>
-          </>
+          <TimelineView
+            loading={loading}
+            screenshots={screenshots}
+            screenshotsWithCommits={screenshotsWithCommits}
+            gitCommits={gitCommits}
+            dayBounds={dayBounds}
+            currentTimestamp={currentTimestamp}
+            hoverTimestamp={hoverTimestamp}
+            setHoverTimestamp={setHoverTimestamp}
+            onSeek={setCurrentTimestamp}
+          />
         )}
       </div>
 
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+
+      {migration.status === 'running' || migration.status === 'error' ? (
+        <MigrationOverlay progress={migration.progress} isError={migration.status === 'error'} />
+      ) : null}
     </TooltipProvider>
   )
 }

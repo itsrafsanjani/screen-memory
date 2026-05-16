@@ -1,7 +1,9 @@
-import { useRef, useCallback, useMemo, useState, useEffect } from 'react'
-import type { ScreenshotRecord, GitCommit } from '../../../types'
-import type { DayBounds } from '../../../types'
+import { useRef, useCallback, useMemo } from 'react'
+import type { ScreenshotRecord, GitCommit, DayBounds } from '../../../types'
 import { formatTimeShort, findNearestScreenshot } from '../lib/time-utils'
+import { useTimelineZoom } from '../hooks/useTimelineZoom'
+import { useTimelineHover } from '../hooks/useTimelineHover'
+import { usePlaybackFollow } from '../hooks/usePlaybackFollow'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 interface Props {
@@ -19,20 +21,16 @@ interface Segment {
   isIdle: boolean
 }
 
-interface VisibleRange {
-  start: number
-  end: number
-}
-
 const GAP_THRESHOLD = 15000
-const MIN_VISIBLE_MS = 5 * 60 * 1000 // 5 minutes
+const ONE_MIN = 60 * 1000
+const ONE_HOUR = 60 * ONE_MIN
 
 function getTickInterval(durationMs: number): number {
-  const durationHrs = durationMs / (1000 * 60 * 60)
-  if (durationHrs < 1) return 5 * 60 * 1000 // 5 min
-  if (durationHrs < 4) return 15 * 60 * 1000 // 15 min
-  if (durationHrs < 8) return 30 * 60 * 1000 // 30 min
-  return 60 * 60 * 1000 // 1 hr
+  const durationHrs = durationMs / ONE_HOUR
+  if (durationHrs < 1) return 5 * ONE_MIN
+  if (durationHrs < 4) return 15 * ONE_MIN
+  if (durationHrs < 8) return 30 * ONE_MIN
+  return ONE_HOUR
 }
 
 export function TimelineTrack({
@@ -46,26 +44,15 @@ export function TimelineTrack({
   const containerRef = useRef<HTMLDivElement>(null)
   const barRef = useRef<HTMLDivElement>(null)
   const isDragging = useRef(false)
-  const [hoverX, setHoverX] = useState<number | null>(null)
-  const [hoverMs, setHoverMs] = useState<number | null>(null)
 
-  // Activity-based visible range with padding
-  const fullRange = useMemo<VisibleRange>(() => {
-    const duration = dayBounds.last - dayBounds.first
-    const padding = Math.max(5 * 60 * 1000, duration * 0.02)
-    return { start: dayBounds.first - padding, end: dayBounds.last + padding }
-  }, [dayBounds.first, dayBounds.last])
+  const { visibleRange, setVisibleRange, rangeDuration, xToMs } = useTimelineZoom({
+    dayBounds,
+    containerRef,
+    barRef
+  })
+  const { hoverX, hoverMs, setHover, clearHover } = useTimelineHover()
+  usePlaybackFollow(currentTimestamp, setVisibleRange)
 
-  const [visibleRange, setVisibleRange] = useState<VisibleRange>(fullRange)
-
-  // Reset visible range when day changes
-  useEffect(() => {
-    setVisibleRange(fullRange)
-  }, [fullRange])
-
-  const rangeDuration = visibleRange.end - visibleRange.start
-
-  // Build activity segments
   const segments = useMemo<Segment[]>(() => {
     if (screenshots.length === 0) return []
 
@@ -92,19 +79,6 @@ export function TimelineTrack({
     return segs
   }, [screenshots])
 
-  // Compute time from mouse X position on the bar
-  const xToMs = useCallback(
-    (clientX: number): number | null => {
-      const bar = barRef.current
-      if (!bar) return null
-      const rect = bar.getBoundingClientRect()
-      const x = clientX - rect.left
-      const ratio = Math.max(0, Math.min(1, x / rect.width))
-      return visibleRange.start + ratio * rangeDuration
-    },
-    [visibleRange.start, rangeDuration]
-  )
-
   const seekToMs = useCallback(
     (ms: number) => {
       const idx = findNearestScreenshot(screenshots, ms)
@@ -113,7 +87,6 @@ export function TimelineTrack({
     [screenshots, onSeek]
   )
 
-  // Click-to-seek
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       isDragging.current = true
@@ -130,25 +103,18 @@ export function TimelineTrack({
     (e: React.MouseEvent) => {
       const bar = barRef.current
       if (!bar) return
-      const rect = bar.getBoundingClientRect()
-      const x = e.clientX - rect.left
+      const ms = xToMs(e.clientX)
+      if (ms === null) return
 
       if (isDragging.current) {
-        const ms = xToMs(e.clientX)
-        if (ms !== null) {
-          seekToMs(ms)
-          onHoverTimestamp?.(ms)
-        }
-      } else {
-        // Hover tooltip
-        const ms = xToMs(e.clientX)
-        if (ms !== null) {
-          setHoverX(x)
-          setHoverMs(ms)
-        }
+        seekToMs(ms)
+        onHoverTimestamp?.(ms)
+        return
       }
+      const rect = bar.getBoundingClientRect()
+      setHover(e.clientX - rect.left, ms)
     },
-    [xToMs, seekToMs, onHoverTimestamp]
+    [xToMs, seekToMs, onHoverTimestamp, setHover]
   )
 
   const handleMouseUp = useCallback(() => {
@@ -158,71 +124,15 @@ export function TimelineTrack({
 
   const handleMouseLeave = useCallback(() => {
     isDragging.current = false
-    setHoverX(null)
-    setHoverMs(null)
+    clearHover()
     onHoverTimestamp?.(null)
-  }, [onHoverTimestamp])
+  }, [clearHover, onHoverTimestamp])
 
-  // Zoom via wheel — attached imperatively to allow preventDefault
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-
-    const handler = (e: WheelEvent): void => {
-      e.preventDefault()
-      const bar = barRef.current
-      if (!bar) return
-
-      const rect = bar.getBoundingClientRect()
-      const cursorX = e.clientX - rect.left
-      const cursorRatio = Math.max(0, Math.min(1, cursorX / rect.width))
-
-      setVisibleRange((prev) => {
-        const duration = prev.end - prev.start
-        const factor = e.deltaY > 0 ? 1.2 : 1 / 1.2
-        const newDuration = Math.max(
-          MIN_VISIBLE_MS,
-          Math.min(fullRange.end - fullRange.start, duration * factor)
-        )
-
-        const cursorMs = prev.start + cursorRatio * duration
-        const newStart = cursorMs - cursorRatio * newDuration
-        const newEnd = newStart + newDuration
-
-        return { start: newStart, end: newEnd }
-      })
-    }
-
-    el.addEventListener('wheel', handler, { passive: false })
-    return () => el.removeEventListener('wheel', handler)
-  }, [fullRange.start, fullRange.end])
-
-  // Auto-follow during playback
-  useEffect(() => {
-    if (currentTimestamp === null) return
-
-    setVisibleRange((prev) => {
-      const duration = prev.end - prev.start
-      const threshold = prev.start + duration * 0.9
-      if (currentTimestamp > threshold) {
-        const shift = duration * 0.5
-        return { start: prev.start + shift, end: prev.end + shift }
-      }
-      if (currentTimestamp < prev.start) {
-        const shift = duration * 0.5
-        return { start: prev.start - shift, end: prev.end - shift }
-      }
-      return prev
-    })
-  }, [currentTimestamp])
-
-  // Playhead position
   const playheadPct =
-    currentTimestamp !== null
-      ? ((currentTimestamp - visibleRange.start) / rangeDuration) * 100
-      : null
+    currentTimestamp === null
+      ? null
+      : ((currentTimestamp - visibleRange.start) / rangeDuration) * 100
 
-  // Time ticks
   const ticks = useMemo(() => {
     const interval = getTickInterval(rangeDuration)
     const firstTick = Math.ceil(visibleRange.start / interval) * interval
@@ -310,7 +220,7 @@ export function TimelineTrack({
         ) : null}
 
         {/* Hover tooltip */}
-        {hoverX != null && hoverMs != null ? (
+        {hoverX !== null && hoverMs !== null ? (
           <Tooltip open>
             <TooltipTrigger asChild>
               <div

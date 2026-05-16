@@ -1,6 +1,5 @@
 import {
   app,
-  ipcMain,
   Menu,
   net,
   protocol,
@@ -12,7 +11,6 @@ import {
 } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
-import { DatabaseService } from './database-service'
 import { StorageService } from './storage-service'
 import { CaptureService } from './capture-service'
 import { GitService } from './git-service'
@@ -21,6 +19,20 @@ import { AiService } from './ai-service'
 import { toggleTimelineWindow, getTimelineWindow, createTimelineWindow } from './app-window'
 import { pathToFileURL } from 'url'
 import { join } from 'path'
+import { closeDb } from './db/client'
+import { runMigrationsIfNeeded } from './db/migration-runner'
+import { getSetting } from './db/repositories/settings'
+import { deleteScreenshotsOlderThan } from './db/repositories/screenshots'
+import { deleteOcrOlderThan } from './db/repositories/ocr'
+import { registerAllIpcHandlers } from './ipc'
+import { IPC } from '../shared/ipc-channels'
+import {
+  DEFAULT_SCREENSHOT_RETENTION_DAYS,
+  DEFAULT_OCR_RETENTION_DAYS,
+  DEFAULT_GIT_SCAN_INTERVAL_MINUTES,
+  DEFAULT_GIT_POLL_INTERVAL_MINUTES,
+  MS_PER_DAY
+} from '../shared/constants'
 
 // Register custom protocol scheme before app ready
 protocol.registerSchemesAsPrivileged([
@@ -36,12 +48,19 @@ protocol.registerSchemesAsPrivileged([
 ])
 
 let tray: Tray | null = null
-let db: DatabaseService
 let storage: StorageService
 let capture: CaptureService
 let gitService: GitService
 let ocrService: OcrService
 let aiService: AiService
+
+const CSP_HEADER =
+  "default-src 'self' screenmemory:; " +
+  "script-src 'self'; " +
+  "style-src 'self' 'unsafe-inline'; " +
+  "img-src 'self' data: screenmemory:; " +
+  "font-src 'self' data:; " +
+  "connect-src 'self' screenmemory:;"
 
 function loadTrayIcon(): Electron.NativeImage {
   const iconPath = app.isPackaged
@@ -81,7 +100,7 @@ function updateTrayMenu(): void {
       label: 'Settings...',
       click: () => {
         const win = getTimelineWindow() || createTimelineWindow()
-        win.webContents.send('open-settings')
+        win.webContents.send(IPC.app.openSettings)
       }
     },
     { type: 'separator' },
@@ -106,124 +125,14 @@ function updateTrayMenu(): void {
   tray.setContextMenu(contextMenu)
 }
 
-function registerIpcHandlers(): void {
-  // --- Screenshot handlers ---
-  ipcMain.handle('get-screenshots-by-date', (_e, date: string) => {
-    const rows = db.getScreenshotsByDate(date)
-    return rows.map((r) => ({ ...r, is_idle: !!r.is_idle }))
-  })
-
-  ipcMain.handle('get-available-dates', () => {
-    return db.getAvailableDates()
-  })
-
-  ipcMain.handle('get-day-bounds', (_e, date: string) => {
-    return db.getDayBounds(date)
-  })
-
-  ipcMain.handle('get-screenshots-by-time-range', (_e, start: number, end: number) => {
-    const rows = db.getScreenshotsByTimeRange(start, end)
-    return rows.map((r) => ({ ...r, is_idle: !!r.is_idle }))
-  })
-
-  // --- Capture handlers ---
-  ipcMain.handle('start-capture', async () => {
-    if (hasScreenRecordingPermission()) {
-      capture.start()
-      updateTrayMenu()
-    } else {
-      await promptForScreenRecordingPermission()
-    }
-  })
-
-  ipcMain.handle('stop-capture', () => {
-    capture.stop()
-    updateTrayMenu()
-  })
-
-  ipcMain.handle('get-capture-status', () => {
-    return capture.isRunning()
-  })
-
-  ipcMain.handle('get-native-theme', () => {
-    return nativeTheme.shouldUseDarkColors
-  })
-
-  // --- Settings handlers ---
-  ipcMain.handle('get-all-settings', () => {
-    return db.getAllSettings()
-  })
-
-  ipcMain.handle('set-setting', (_e, key: string, value: string) => {
-    db.setSetting(key, value)
-
-    // Apply settings changes live
-    if (key.startsWith('capture.')) {
-      const activeMs = db.getSetting('capture.activeIntervalMs')
-      const idleMs = db.getSetting('capture.idleIntervalMs')
-      const quality = db.getSetting('capture.jpegQuality')
-      capture.updateIntervals(
-        activeMs ? parseInt(activeMs, 10) : undefined,
-        idleMs ? parseInt(idleMs, 10) : undefined,
-        quality ? parseInt(quality, 10) : undefined
-      )
-    }
-  })
-
-  ipcMain.handle('get-storage-usage', () => {
-    return storage.getStorageUsage()
-  })
-
-  ipcMain.handle('open-directory-dialog', async () => {
-    const win = getTimelineWindow()
-    if (!win) return null
-    const result = await dialog.showOpenDialog(win, {
-      properties: ['openDirectory']
-    })
-    if (result.canceled || result.filePaths.length === 0) return null
-    return result.filePaths[0]
-  })
-
-  // --- Git handlers ---
-  ipcMain.handle('get-git-commits-by-date', (_e, start: number, end: number) => {
-    return db.getCommitsByDateRange(start, end)
-  })
-
-  ipcMain.handle('get-git-repos', () => {
-    return db.getGitRepos()
-  })
-
-  ipcMain.handle('scan-git-repos', async () => {
-    await gitService.scanRepos()
-    await gitService.pollAllRepos()
-  })
-
-  // --- OCR handlers ---
-  ipcMain.handle('search-ocr', (_e, query: string, startMs?: number, endMs?: number) => {
-    return db.searchOcr(query, startMs, endMs)
-  })
-
-  ipcMain.handle('get-ocr-text', (_e, screenshotId: number) => {
-    const result = db.getOcrByScreenshotId(screenshotId)
-    return result?.text ?? null
-  })
-
-  // --- AI Summary handler ---
-  ipcMain.handle('generate-summary', async (e, startMs: number, endMs: number) => {
-    await aiService.streamSummary(startMs, endMs, e.sender)
-  })
-
-  // App info
-  ipcMain.handle('get-app-version', () => {
-    return app.getVersion()
-  })
-}
-
 function registerProtocol(): void {
-  protocol.handle('screenmemory', (request) => {
+  protocol.handle('screenmemory', async (request) => {
     const filePath = decodeURIComponent(request.url.replace('screenmemory://', ''))
     const absolutePath = storage.getAbsolutePath(filePath)
-    return net.fetch(pathToFileURL(absolutePath).toString())
+    const response = await net.fetch(pathToFileURL(absolutePath).toString())
+    // Attach CSP header to every served asset response
+    response.headers.set('Content-Security-Policy', CSP_HEADER)
+    return response
   })
 }
 
@@ -331,53 +240,78 @@ app.whenReady().then(async () => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // Set up application menu
   createApplicationMenu()
 
-  // Register custom protocol before any window loads
+  // Create the timeline window early so the renderer can show a migration overlay
+  storage = new StorageService()
   registerProtocol()
 
-  // Init services
-  db = new DatabaseService()
-  storage = new StorageService()
-  capture = new CaptureService(db, storage)
-  gitService = new GitService(db)
-  ocrService = new OcrService(db)
-  aiService = new AiService(db)
+  const win = createTimelineWindow()
 
-  // Load capture settings
-  const activeMs = db.getSetting('capture.activeIntervalMs')
-  const idleMs = db.getSetting('capture.idleIntervalMs')
-  const quality = db.getSetting('capture.jpegQuality')
+  // Wait for the renderer to be ready before sending migration progress events.
+  await new Promise<void>((resolve) => {
+    if (win.webContents.isLoadingMainFrame()) {
+      win.webContents.once('did-finish-load', () => resolve())
+    } else {
+      resolve()
+    }
+  })
+
+  try {
+    await runMigrationsIfNeeded(win.webContents)
+  } catch (e) {
+    console.error('Database migration failed:', e)
+    const message = e instanceof Error ? e.message : String(e)
+    win.webContents.send(IPC.migration.progress, { phase: 'error', message })
+    dialog.showErrorBox(
+      'Database migration failed',
+      'Screen Memory could not migrate its database. The original database was preserved as a .bak file. Details: ' +
+        message
+    )
+    return
+  }
+
+  // Init dependent services AFTER DB is ready
+  capture = new CaptureService(storage)
+  gitService = new GitService()
+  ocrService = new OcrService()
+  aiService = new AiService()
+
+  // Apply capture settings
+  const activeMs = getSetting('capture.activeIntervalMs')
+  const idleMs = getSetting('capture.idleIntervalMs')
+  const quality = getSetting('capture.jpegQuality')
   capture.updateIntervals(
     activeMs ? parseInt(activeMs, 10) : undefined,
     idleMs ? parseInt(idleMs, 10) : undefined,
     quality ? parseInt(quality, 10) : undefined
   )
 
-  // Auto-cleanup old data — stage 1: screenshots (files + DB rows)
-  const screenshotRetentionDaysSetting = db.getSetting('storage.retentionDays')
+  // Stage 1: screenshot file + row retention
+  const screenshotRetentionDaysSetting = getSetting('storage.retentionDays')
   const screenshotRetentionDays = screenshotRetentionDaysSetting
     ? parseInt(screenshotRetentionDaysSetting, 10)
-    : 7
-  const screenshotCutoff = Date.now() - screenshotRetentionDays * 24 * 60 * 60 * 1000
+    : DEFAULT_SCREENSHOT_RETENTION_DAYS
+  const screenshotCutoff = Date.now() - screenshotRetentionDays * MS_PER_DAY
   const removedDirs = storage.cleanupOldData(screenshotRetentionDays)
   if (removedDirs.length > 0) {
-    db.deleteOlderThan(screenshotCutoff)
+    deleteScreenshotsOlderThan(screenshotCutoff)
     console.log('Cleaned up old screenshots:', removedDirs)
   }
 
-  // Stage 2: OCR text (kept longer than screenshots so summaries retain context)
-  const ocrRetentionDaysSetting = db.getSetting('storage.ocrRetentionDays')
-  const ocrRetentionDays = ocrRetentionDaysSetting ? parseInt(ocrRetentionDaysSetting, 10) : 90
+  // Stage 2: OCR retention
+  const ocrRetentionDaysSetting = getSetting('storage.ocrRetentionDays')
+  const ocrRetentionDays = ocrRetentionDaysSetting
+    ? parseInt(ocrRetentionDaysSetting, 10)
+    : DEFAULT_OCR_RETENTION_DAYS
   const effectiveOcrDays = Math.max(ocrRetentionDays, screenshotRetentionDays)
-  const ocrCutoff = Date.now() - effectiveOcrDays * 24 * 60 * 60 * 1000
-  const deletedOcr = db.deleteOcrOlderThan(ocrCutoff)
+  const ocrCutoff = Date.now() - effectiveOcrDays * MS_PER_DAY
+  const deletedOcr = deleteOcrOlderThan(ocrCutoff)
   if (deletedOcr > 0) {
     console.log(`Cleaned up ${deletedOcr} OCR rows`)
   }
 
-  // Connect OCR to capture pipeline
+  // Wire OCR pipeline
   if (ocrService.isAvailable()) {
     capture.setCaptureCallback((job) => {
       ocrService.enqueue(job)
@@ -387,33 +321,35 @@ app.whenReady().then(async () => {
     console.log('OCR binary not found, OCR disabled')
   }
 
-  // Capture status change → notify renderer
+  // Capture status change notifications
   capture.setStatusCallback((running) => {
-    const win = getTimelineWindow()
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('capture-status-changed', running)
+    const target = getTimelineWindow()
+    if (target && !target.isDestroyed()) {
+      target.webContents.send(IPC.capture.statusChanged, running)
     }
     updateTrayMenu()
   })
 
-  // Theme change → notify renderer
   nativeTheme.on('updated', () => {
-    const win = getTimelineWindow()
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('theme-changed', nativeTheme.shouldUseDarkColors)
+    const target = getTimelineWindow()
+    if (target && !target.isDestroyed()) {
+      target.webContents.send(IPC.theme.changed, nativeTheme.shouldUseDarkColors)
     }
   })
 
-  // Register IPC handlers
-  registerIpcHandlers()
+  registerAllIpcHandlers({
+    capture,
+    storage,
+    git: gitService,
+    ai: aiService,
+    onCaptureStatusChange: updateTrayMenu
+  })
 
-  // Create tray
   tray = new Tray(loadTrayIcon())
   tray.setToolTip('Screen Memory')
   tray.on('click', () => toggleTimelineWindow())
   updateTrayMenu()
 
-  // Configure auto-updater
   autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = true
 
@@ -455,18 +391,16 @@ app.whenReady().then(async () => {
 
   autoUpdater.checkForUpdates()
 
-  // Auto-start capture only when permission is already granted (no probing)
   if (hasScreenRecordingPermission()) {
     capture.start()
     updateTrayMenu()
   }
 
-  // Start git service
-  const scanInterval = db.getSetting('git.scanIntervalMinutes')
-  const pollInterval = db.getSetting('git.pollIntervalMinutes')
+  const scanInterval = getSetting('git.scanIntervalMinutes')
+  const pollInterval = getSetting('git.pollIntervalMinutes')
   gitService.start(
-    scanInterval ? parseInt(scanInterval, 10) : 60,
-    pollInterval ? parseInt(pollInterval, 10) : 5
+    scanInterval ? parseInt(scanInterval, 10) : DEFAULT_GIT_SCAN_INTERVAL_MINUTES,
+    pollInterval ? parseInt(pollInterval, 10) : DEFAULT_GIT_POLL_INTERVAL_MINUTES
   )
 })
 
@@ -481,5 +415,5 @@ app.on('activate', () => {
 app.on('before-quit', () => {
   capture?.stop()
   gitService?.stop()
-  db?.close()
+  closeDb()
 })

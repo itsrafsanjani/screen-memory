@@ -73,11 +73,11 @@ export function PlaybackControls({
         </SelectContent>
       </Select>
 
-      {currentTimestamp && (
+      {currentTimestamp ? (
         <span className="text-xs text-muted-foreground font-mono tabular-nums ml-1">
           {formatTime(currentTimestamp)}
         </span>
-      )}
+      ) : null}
     </div>
   )
 }

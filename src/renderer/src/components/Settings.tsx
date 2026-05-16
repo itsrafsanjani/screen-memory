@@ -23,6 +23,33 @@ interface Props {
   onOpenChange: (open: boolean) => void
 }
 
+interface SettingsSectionProps {
+  section: SectionId
+  getSetting: (key: string, defaultValue?: string) => string
+  updateSetting: (key: string, value: string) => Promise<void>
+}
+
+function SettingsSection({
+  section,
+  getSetting,
+  updateSetting
+}: SettingsSectionProps): React.JSX.Element | null {
+  switch (section) {
+    case 'general':
+      return <GeneralSettings />
+    case 'capture':
+      return <CaptureSettings getSetting={getSetting} updateSetting={updateSetting} />
+    case 'storage':
+      return <StorageSettings getSetting={getSetting} updateSetting={updateSetting} />
+    case 'git':
+      return <GitSettings getSetting={getSetting} updateSetting={updateSetting} />
+    case 'ai':
+      return <AIProviderSettings getSetting={getSetting} updateSetting={updateSetting} />
+    default:
+      return null
+  }
+}
+
 export function SettingsDialog({ open, onOpenChange }: Props): React.JSX.Element {
   const [activeSection, setActiveSection] = useState<SectionId>('general')
   const { getSetting, updateSetting, loading } = useSettings()
@@ -58,21 +85,11 @@ export function SettingsDialog({ open, onOpenChange }: Props): React.JSX.Element
             {loading ? (
               <p className="text-sm text-muted-foreground">Loading settings...</p>
             ) : (
-              <>
-                {activeSection === 'general' && <GeneralSettings />}
-                {activeSection === 'capture' && (
-                  <CaptureSettings getSetting={getSetting} updateSetting={updateSetting} />
-                )}
-                {activeSection === 'storage' && (
-                  <StorageSettings getSetting={getSetting} updateSetting={updateSetting} />
-                )}
-                {activeSection === 'git' && (
-                  <GitSettings getSetting={getSetting} updateSetting={updateSetting} />
-                )}
-                {activeSection === 'ai' && (
-                  <AIProviderSettings getSetting={getSetting} updateSetting={updateSetting} />
-                )}
-              </>
+              <SettingsSection
+                section={activeSection}
+                getSetting={getSetting}
+                updateSetting={updateSetting}
+              />
             )}
           </div>
         </div>

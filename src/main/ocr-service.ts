@@ -2,7 +2,7 @@ import { execFile } from 'child_process'
 import { existsSync } from 'fs'
 import { join } from 'path'
 import { app } from 'electron'
-import { DatabaseService } from './database-service'
+import { insertOcrResult } from './db/repositories/ocr'
 
 interface OcrJob {
   screenshotId: number
@@ -13,13 +13,11 @@ interface OcrJob {
 }
 
 export class OcrService {
-  private db: DatabaseService
   private queue: OcrJob[] = []
   private processing = false
   private binaryPath: string
 
-  constructor(db: DatabaseService) {
-    this.db = db
+  constructor() {
     this.binaryPath = this.resolveBinaryPath()
   }
 
@@ -68,7 +66,7 @@ export class OcrService {
     try {
       const result = await this.runOcr(job.imagePath)
       if (result && result.text.trim().length > 0) {
-        this.db.insertOcrResult({
+        insertOcrResult({
           screenshot_id: job.screenshotId,
           timestamp: job.timestamp,
           display_id: job.displayId,

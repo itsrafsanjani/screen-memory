@@ -32,7 +32,7 @@ export function SearchBar({
             value={query}
             onChange={(e) => onSearch(e.target.value)}
           />
-          {query && (
+          {query ? (
             <Button
               variant="ghost"
               size="icon"
@@ -41,14 +41,14 @@ export function SearchBar({
             >
               <X className="h-3 w-3" />
             </Button>
-          )}
+          ) : null}
         </div>
       </div>
 
       {/* Search results dropdown */}
-      {query && results.length > 0 && (
+      {query && results.length > 0 ? (
         <div className="absolute top-full right-0 mt-1 w-72 max-h-60 overflow-y-auto rounded-lg border border-border bg-popover shadow-lg z-50">
-          {searching && <div className="p-2 text-xs text-muted-foreground">Searching...</div>}
+          {searching ? <div className="p-2 text-xs text-muted-foreground">Searching...</div> : null}
           {results.map((r, i) => (
             <button
               key={i}
@@ -60,7 +60,7 @@ export function SearchBar({
             </button>
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   )
 }

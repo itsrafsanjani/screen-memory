@@ -27,7 +27,10 @@ export function createTimelineWindow(): BrowserWindow {
     backgroundColor: '#00000000',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      webSecurity: true
     }
   })
 

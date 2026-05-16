@@ -1,26 +1,23 @@
 import { BrowserWindow } from 'electron'
-import { DatabaseService } from './database-service'
+import { getSetting } from './db/repositories/settings'
+import { getCommitsByDateRange } from './db/repositories/git'
+import { getOcrByTimeRange } from './db/repositories/ocr'
+import { IPC } from '../shared/ipc-channels'
 
 export class AiService {
-  private db: DatabaseService
-
-  constructor(db: DatabaseService) {
-    this.db = db
-  }
-
   async streamSummary(
     startMs: number,
     endMs: number,
     webContents: BrowserWindow['webContents']
   ): Promise<void> {
-    const provider = this.db.getSetting('ai.provider') || 'openai'
-    const apiKey = this.db.getSetting('ai.apiKey')
-    const model = this.db.getSetting('ai.model') || this.getDefaultModel(provider)
-    const baseUrl = this.db.getSetting('ai.baseUrl')
+    const provider = getSetting('ai.provider') || 'openai'
+    const apiKey = getSetting('ai.apiKey')
+    const model = getSetting('ai.model') || this.getDefaultModel(provider)
+    const baseUrl = getSetting('ai.baseUrl')
 
     if (!apiKey && provider !== 'ollama' && provider !== 'lmstudio') {
-      webContents.send('summary-error', 'No API key configured. Please set one in Settings.')
-      webContents.send('summary-done')
+      webContents.send(IPC.ai.summaryError, 'No API key configured. Please set one in Settings.')
+      webContents.send(IPC.ai.summaryDone)
       return
     }
 
@@ -37,13 +34,13 @@ export class AiService {
       })
 
       for await (const chunk of result.textStream) {
-        webContents.send('summary-chunk', chunk)
+        webContents.send(IPC.ai.summaryChunk, chunk)
       }
     } catch (err) {
       console.error('AI summary error:', err)
-      webContents.send('summary-error', this.getErrorMessage(err, provider))
+      webContents.send(IPC.ai.summaryError, this.getErrorMessage(err, provider))
     } finally {
-      webContents.send('summary-done')
+      webContents.send(IPC.ai.summaryDone)
     }
   }
 
@@ -171,12 +168,12 @@ export class AiService {
 
   private buildPrompt(startMs: number, endMs: number): string {
     // Get git commits for the period
-    const commits = this.db.getCommitsByDateRange(startMs, endMs)
+    const commits = getCommitsByDateRange(startMs, endMs)
 
     // Get sampled OCR text — one sample every 5 minutes
     const ocrSamples: { timestamp: number; text: string }[] = []
     const sampleInterval = 5 * 60 * 1000
-    const ocrRows = this.db.getOcrByTimeRange(startMs, endMs)
+    const ocrRows = getOcrByTimeRange(startMs, endMs)
 
     let lastSampledTs = 0
     for (const row of ocrRows) {
