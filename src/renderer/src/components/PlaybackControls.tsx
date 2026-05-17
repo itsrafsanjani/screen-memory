@@ -35,7 +35,7 @@ export function PlaybackControls({
     <div className="flex items-center gap-1">
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon-sm" onClick={onSkipBackward}>
+          <Button variant="ghost" size="icon-sm" className="h-7 w-7" onClick={onSkipBackward}>
             <SkipBack className="size-4" />
           </Button>
         </TooltipTrigger>
@@ -44,7 +44,7 @@ export function PlaybackControls({
 
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon-sm" onClick={onToggle}>
+          <Button variant="ghost" size="icon-sm" className="h-7 w-7" onClick={onToggle}>
             {isPlaying ? <Pause className="size-4" /> : <Play className="size-4" />}
           </Button>
         </TooltipTrigger>
@@ -53,7 +53,7 @@ export function PlaybackControls({
 
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon-sm" onClick={onSkipForward}>
+          <Button variant="ghost" size="icon-sm" className="h-7 w-7" onClick={onSkipForward}>
             <SkipForward className="size-4" />
           </Button>
         </TooltipTrigger>
@@ -61,7 +61,7 @@ export function PlaybackControls({
       </Tooltip>
 
       <Select value={String(speed)} onValueChange={(v) => onSpeedChange(Number(v))}>
-        <SelectTrigger size="sm" className="w-18 h-7 text-xs rounded-lg">
+        <SelectTrigger size="sm" className="w-18 h-7! py-0! text-xs rounded-lg">
           <SelectValue />
         </SelectTrigger>
         <SelectContent position="popper" side="bottom" align="end">
