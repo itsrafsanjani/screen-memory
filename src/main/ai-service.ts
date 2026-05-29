@@ -3,6 +3,7 @@ import { getSetting } from './db/repositories/settings'
 import { getCommitsByDateRange } from './db/repositories/git'
 import { getOcrByTimeRange } from './db/repositories/ocr'
 import { IPC } from '../shared/ipc-channels'
+import { DEFAULT_SUMMARY_PROMPT } from '../shared/prompts'
 
 export class AiService {
   async streamSummary(
@@ -213,21 +214,9 @@ export class AiService {
       }
     }
 
-    let prompt = `You are summarizing a developer's work activity for the period: ${period}.
-
-Git commits are the PRIMARY source of truth for what the developer accomplished. Screen activity is supplementary context only — use it to fill in gaps or add color, but never let it overshadow git data.
-
-Produce two top-level sections in your output:
-
-## Development Summary
-Based on git commits. Use ### HH:00 - HH:00 sub-headers for each hour block. Within each block, group by repo and describe accomplishments. Omit hour blocks with no commits.
-
-## General Activity
-Based on screen activity. Use ### HH:00 - HH:00 sub-headers for each hour block. Write 1-2 sentences per block describing what the developer was doing on screen. Omit hour blocks with no screen data.
-
-Format the output as clean Markdown with headers and bullet points.
-
-`
+    const customPrompt = getSetting('ai.summaryPrompt')
+    const template = customPrompt && customPrompt.trim() ? customPrompt : DEFAULT_SUMMARY_PROMPT
+    let prompt = `${template}\n\n## Period\n\n${period}\n\n`
 
     // Add git commits grouped by hour and repo
     if (commitsByHour.size > 0) {

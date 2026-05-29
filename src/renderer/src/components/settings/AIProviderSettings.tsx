@@ -1,3 +1,13 @@
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -7,6 +17,8 @@ import {
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
+import { DEFAULT_SUMMARY_PROMPT } from '@shared/prompts'
 
 interface Props {
   getSetting: (key: string, defaultValue?: string) => string
@@ -50,6 +62,10 @@ export function AIProviderSettings({ getSetting, updateSetting }: Props): React.
   const showApiKey = !LOCAL_PROVIDERS.has(provider)
   const showBaseUrl = BASE_URL_PROVIDERS.has(provider)
   const baseUrlPlaceholder = BASE_URL_PLACEHOLDERS[provider] ?? 'Optional'
+
+  const storedPrompt = getSetting('ai.summaryPrompt')
+  const summaryPrompt = storedPrompt.trim() ? storedPrompt : DEFAULT_SUMMARY_PROMPT
+  const isDefaultPrompt = !storedPrompt.trim()
 
   return (
     <div className="space-y-4">
@@ -103,6 +119,51 @@ export function AIProviderSettings({ getSetting, updateSetting }: Props): React.
           />
         </div>
       ) : null}
+
+      <div className="space-y-2">
+        <Label>Summary Prompt</Label>
+        <Textarea
+          className="field-sizing-fixed h-40 resize-y font-mono text-xs"
+          value={summaryPrompt}
+          onChange={(e) => updateSetting('ai.summaryPrompt', e.target.value)}
+        />
+        <p className="text-xs text-muted-foreground">
+          Instructions sent to the AI. Your git commits, screen activity, and the date range are
+          appended automatically.
+        </p>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isDefaultPrompt}
+            onClick={() => updateSetting('ai.summaryPrompt', '')}
+          >
+            Reset to default
+          </Button>
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="ghost" size="sm">
+                View default
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Default Summary Prompt</DialogTitle>
+                <DialogDescription>
+                  The built-in prompt shipped with the current version. Updates when the app is
+                  upgraded.
+                </DialogDescription>
+              </DialogHeader>
+              <Textarea
+                readOnly
+                value={DEFAULT_SUMMARY_PROMPT}
+                className="field-sizing-fixed h-72 resize-none font-mono text-xs"
+              />
+              <DialogFooter showCloseButton />
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
     </div>
   )
 }
