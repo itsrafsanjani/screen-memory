@@ -20,12 +20,12 @@ export function StorageSettings({ getSetting, updateSetting }: Props): React.JSX
         <Input
           type="number"
           min="1"
-          value={getSetting('storage.retentionDays', '7')}
+          value={getSetting('storage.retentionDays', '30')}
           onChange={(e) => updateSetting('storage.retentionDays', e.target.value)}
           className="w-24"
         />
         <p className="text-xs text-muted-foreground">
-          Screenshots older than this are automatically deleted (default: 7 days)
+          Screenshots older than this are automatically deleted (default: 30 days)
         </p>
       </div>
 

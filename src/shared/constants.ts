@@ -22,7 +22,7 @@ export const GIT_LOG_MAX_BUFFER = 10 * 1024 * 1024
 export const GIT_INITIAL_HISTORY_DAYS = 30
 
 // Retention (days)
-export const DEFAULT_SCREENSHOT_RETENTION_DAYS = 7
+export const DEFAULT_SCREENSHOT_RETENTION_DAYS = 30
 export const DEFAULT_OCR_RETENTION_DAYS = 90
 
 // Time helpers
