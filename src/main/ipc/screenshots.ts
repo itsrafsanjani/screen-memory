@@ -1,12 +1,15 @@
 import { z } from 'zod'
 import { IPC } from '../../shared/ipc-channels'
+import type { StorageService } from '../storage-service'
 import {
+  deleteScreenshotsInRange,
   getAvailableDates,
   getDayBounds,
   getScreenshotsByDate,
   getScreenshotsByTimeRange,
   type ScreenshotRow
 } from '../db/repositories/screenshots'
+import { deleteOcrInRange } from '../db/repositories/ocr'
 import { registerHandler } from './_helpers'
 
 const dateSchema = z.tuple([z.string()])
@@ -18,7 +21,7 @@ function withBooleanIdle(
   return { ...row, is_idle: !!row.is_idle }
 }
 
-export function registerScreenshotHandlers(): void {
+export function registerScreenshotHandlers(ctx: { storage: StorageService }): void {
   registerHandler(IPC.screenshots.getByDate, dateSchema, (_e, date: string) =>
     getScreenshotsByDate(date).map(withBooleanIdle)
   )
@@ -32,4 +35,13 @@ export function registerScreenshotHandlers(): void {
   registerHandler(IPC.screenshots.getByTimeRange, rangeSchema, (_e, start: number, end: number) =>
     getScreenshotsByTimeRange(start, end).map(withBooleanIdle)
   )
+
+  registerHandler(IPC.screenshots.deleteRange, rangeSchema, (_e, start: number, end: number) => {
+    const [from, to] = start <= end ? [start, end] : [end, start]
+    const rows = getScreenshotsByTimeRange(from, to)
+    ctx.storage.deleteFiles(rows.map((r) => r.file_path))
+    const deletedScreenshots = deleteScreenshotsInRange(from, to)
+    const deletedOcr = deleteOcrInRange(from, to)
+    return { deletedScreenshots, deletedOcr }
+  })
 }

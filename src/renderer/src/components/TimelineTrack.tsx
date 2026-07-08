@@ -5,6 +5,7 @@ import { useTimelineZoom } from '../hooks/useTimelineZoom'
 import { useTimelineHover } from '../hooks/useTimelineHover'
 import { usePlaybackFollow } from '../hooks/usePlaybackFollow'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import type { RangeSelection } from '../hooks/useRangeSelection'
 
 interface Props {
   screenshots: ScreenshotRecord[]
@@ -13,6 +14,9 @@ interface Props {
   onSeek: (timestamp: number) => void
   onHoverTimestamp?: (ts: number | null) => void
   gitCommits?: GitCommit[]
+  selectMode: boolean
+  selection: RangeSelection | null
+  onSelectionChange: (selection: RangeSelection | null) => void
 }
 
 interface Segment {
@@ -39,11 +43,16 @@ export function TimelineTrack({
   currentTimestamp,
   onSeek,
   onHoverTimestamp,
-  gitCommits
+  gitCommits,
+  selectMode,
+  selection,
+  onSelectionChange
 }: Props): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
   const barRef = useRef<HTMLDivElement>(null)
   const isDragging = useRef(false)
+  const isSelecting = useRef(false)
+  const selectAnchorMs = useRef<number | null>(null)
 
   const { visibleRange, setVisibleRange, rangeDuration, xToMs } = useTimelineZoom({
     dayBounds,
@@ -89,14 +98,23 @@ export function TimelineTrack({
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      isDragging.current = true
       const ms = xToMs(e.clientX)
+
+      if (selectMode) {
+        if (ms === null) return
+        isSelecting.current = true
+        selectAnchorMs.current = ms
+        onSelectionChange({ startMs: ms, endMs: ms })
+        return
+      }
+
+      isDragging.current = true
       if (ms !== null) {
         seekToMs(ms)
         onHoverTimestamp?.(ms)
       }
     },
-    [xToMs, seekToMs, onHoverTimestamp]
+    [xToMs, selectMode, onSelectionChange, seekToMs, onHoverTimestamp]
   )
 
   const handleMouseMove = useCallback(
@@ -106,6 +124,17 @@ export function TimelineTrack({
       const ms = xToMs(e.clientX)
       if (ms === null) return
 
+      if (selectMode) {
+        if (isSelecting.current && selectAnchorMs.current !== null) {
+          const anchor = selectAnchorMs.current
+          onSelectionChange({ startMs: Math.min(anchor, ms), endMs: Math.max(anchor, ms) })
+        } else {
+          const rect = bar.getBoundingClientRect()
+          setHover(e.clientX - rect.left, ms)
+        }
+        return
+      }
+
       if (isDragging.current) {
         seekToMs(ms)
         onHoverTimestamp?.(ms)
@@ -114,19 +143,34 @@ export function TimelineTrack({
       const rect = bar.getBoundingClientRect()
       setHover(e.clientX - rect.left, ms)
     },
-    [xToMs, seekToMs, onHoverTimestamp, setHover]
+    [xToMs, selectMode, onSelectionChange, seekToMs, onHoverTimestamp, setHover]
   )
 
   const handleMouseUp = useCallback(() => {
+    if (selectMode) {
+      isSelecting.current = false
+      selectAnchorMs.current = null
+      // A plain click (no dragged range) clears the selection.
+      if (selection && selection.startMs === selection.endMs) {
+        onSelectionChange(null)
+      }
+      return
+    }
     isDragging.current = false
     onHoverTimestamp?.(null)
-  }, [onHoverTimestamp])
+  }, [selectMode, selection, onSelectionChange, onHoverTimestamp])
 
   const handleMouseLeave = useCallback(() => {
+    if (selectMode) {
+      isSelecting.current = false
+      selectAnchorMs.current = null
+      clearHover()
+      return
+    }
     isDragging.current = false
     clearHover()
     onHoverTimestamp?.(null)
-  }, [clearHover, onHoverTimestamp])
+  }, [selectMode, clearHover, onHoverTimestamp])
 
   const playheadPct =
     currentTimestamp === null
@@ -149,7 +193,7 @@ export function TimelineTrack({
       {/* Bar area */}
       <div
         ref={barRef}
-        className="relative h-8 bg-secondary rounded cursor-pointer"
+        className={`relative h-8 bg-secondary rounded ${selectMode ? 'cursor-crosshair' : 'cursor-pointer'}`}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -174,6 +218,28 @@ export function TimelineTrack({
             />
           )
         })}
+
+        {/* Selection band (delete range) */}
+        {selection
+          ? (() => {
+              const left = ((selection.startMs - visibleRange.start) / rangeDuration) * 100
+              const width = ((selection.endMs - selection.startMs) / rangeDuration) * 100
+              return (
+                <div
+                  className="bg-destructive/25 border-x-2 border-destructive"
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    bottom: 0,
+                    left: `${left}%`,
+                    width: `${width}%`,
+                    zIndex: 5,
+                    pointerEvents: 'none'
+                  }}
+                />
+              )
+            })()
+          : null}
 
         {/* Git commit markers */}
         {gitCommits?.map((commit) => {

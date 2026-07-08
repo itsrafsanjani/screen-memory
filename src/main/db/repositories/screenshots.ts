@@ -122,6 +122,15 @@ export function deleteScreenshotsOlderThan(timestampMs: number): number {
   return result.changes
 }
 
+export function deleteScreenshotsInRange(startMs: number, endMs: number): number {
+  const db = getDb()
+  const result = db
+    .delete(screenshots)
+    .where(and(gte(screenshots.timestamp, startMs), lte(screenshots.timestamp, endMs)))
+    .run()
+  return result.changes
+}
+
 export function getScreenshotById(id: number): ScreenshotRow | null {
   const db = getDb()
   const row = db.select().from(screenshots).where(eq(screenshots.id, id)).get()

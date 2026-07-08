@@ -23,6 +23,12 @@ const api = {
   getScreenshotsByTimeRange(start: number, end: number): Promise<ScreenshotRecord[]> {
     return invoke(IPC.screenshots.getByTimeRange, start, end)
   },
+  deleteScreenshotRange(
+    start: number,
+    end: number
+  ): Promise<{ deletedScreenshots: number; deletedOcr: number }> {
+    return invoke(IPC.screenshots.deleteRange, start, end)
+  },
 
   // Capture
   startCapture(): Promise<void> {

@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTimeline } from './hooks/useTimeline'
+import { useRangeSelection } from './hooks/useRangeSelection'
 import { usePlayback } from './hooks/usePlayback'
 import { useGitCommits } from './hooks/useGitCommits'
 import { useSearch } from './hooks/useSearch'
@@ -18,7 +19,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Separator } from '@/components/ui/separator'
-import { Settings, Sparkles, Monitor } from 'lucide-react'
+import { Settings, Sparkles, Monitor, MousePointer2, Scissors } from 'lucide-react'
 import type { ScreenshotRecord } from '../../types'
 
 type ViewMode = 'timeline' | 'summary'
@@ -49,8 +50,11 @@ function App(): React.JSX.Element {
     goToPreviousDate,
     goToNextDate,
     hasPreviousDate,
-    hasNextDate
+    hasNextDate,
+    reload
   } = useTimeline()
+
+  const { selectMode, setSelectMode, selection, setSelection, clearSelection } = useRangeSelection()
 
   const gitCommits = useGitCommits(currentDate)
 
@@ -90,6 +94,16 @@ function App(): React.JSX.Element {
     setCurrentTimestamp(timestamp)
     clearSearch()
   }
+
+  const handleDeleteRange = useCallback(
+    async (start: number, end: number): Promise<void> => {
+      await window.electronAPI.deleteScreenshotRange(start, end)
+      clearSelection()
+      setSelectMode(false)
+      reload()
+    },
+    [clearSelection, setSelectMode, reload]
+  )
 
   const recordingBadgeClass = isRecording
     ? 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400'
@@ -158,6 +172,27 @@ function App(): React.JSX.Element {
                   onClear={clearSearch}
                   onResultClick={handleSearchResultClick}
                 />
+                {/* Seek / Select mode toggle — segmented control */}
+                <div className="flex items-center bg-secondary rounded-lg p-0.5 gap-0.5">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={`h-6 px-2.5 ${!selectMode ? 'bg-background shadow-sm rounded-md' : ''}`}
+                    onClick={() => setSelectMode(false)}
+                    title="Seek mode"
+                  >
+                    <MousePointer2 className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={`h-6 px-2.5 ${selectMode ? 'bg-background shadow-sm rounded-md' : ''}`}
+                    onClick={() => setSelectMode(true)}
+                    title="Select to delete"
+                  >
+                    <Scissors className="h-3 w-3" />
+                  </Button>
+                </div>
                 <PlaybackControls
                   isPlaying={isPlaying}
                   speed={speed}
@@ -196,6 +231,11 @@ function App(): React.JSX.Element {
             hoverTimestamp={hoverTimestamp}
             setHoverTimestamp={setHoverTimestamp}
             onSeek={setCurrentTimestamp}
+            selectMode={selectMode}
+            selection={selection}
+            onSelectionChange={setSelection}
+            onCancelSelection={clearSelection}
+            onDeleteRange={handleDeleteRange}
           />
         )}
       </div>

@@ -1,8 +1,10 @@
-import type { Dispatch, SetStateAction } from 'react'
+import { useMemo, type Dispatch, type SetStateAction } from 'react'
 import type { DayBounds, GitCommit, ScreenshotRecord } from '../../../types'
 import { ScreenshotViewer } from './ScreenshotViewer'
 import { Timeline } from './Timeline'
 import { DetailSidebar } from './DetailSidebar'
+import { RangeDeleteBar } from './RangeDeleteBar'
+import type { RangeSelection } from '../hooks/useRangeSelection'
 
 interface Props {
   loading: boolean
@@ -14,6 +16,11 @@ interface Props {
   hoverTimestamp: number | null
   setHoverTimestamp: Dispatch<SetStateAction<number | null>>
   onSeek: (timestamp: number) => void
+  selectMode: boolean
+  selection: RangeSelection | null
+  onSelectionChange: (selection: RangeSelection | null) => void
+  onCancelSelection: () => void
+  onDeleteRange: (start: number, end: number) => Promise<void>
 }
 
 export function TimelineView({
@@ -25,8 +32,20 @@ export function TimelineView({
   currentTimestamp,
   hoverTimestamp,
   setHoverTimestamp,
-  onSeek
+  onSeek,
+  selectMode,
+  selection,
+  onSelectionChange,
+  onCancelSelection,
+  onDeleteRange
 }: Props): React.JSX.Element {
+  const selectedCount = useMemo(() => {
+    if (!selection) return 0
+    return screenshots.filter(
+      (s) => s.timestamp >= selection.startMs && s.timestamp <= selection.endMs
+    ).length
+  }, [screenshots, selection])
+
   return (
     <>
       {loading ? (
@@ -49,6 +68,14 @@ export function TimelineView({
       )}
 
       <div className="border-t border-border/60 w-full">
+        {selection ? (
+          <RangeDeleteBar
+            selection={selection}
+            screenshotCount={selectedCount}
+            onCancel={onCancelSelection}
+            onConfirm={onDeleteRange}
+          />
+        ) : null}
         <Timeline
           screenshots={screenshotsWithCommits}
           dayBounds={dayBounds}
@@ -56,6 +83,9 @@ export function TimelineView({
           onSeek={onSeek}
           onHoverTimestamp={setHoverTimestamp}
           gitCommits={gitCommits}
+          selectMode={selectMode}
+          selection={selection}
+          onSelectionChange={onSelectionChange}
         />
       </div>
     </>

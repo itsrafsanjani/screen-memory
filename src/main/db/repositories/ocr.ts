@@ -75,6 +75,15 @@ export function deleteOcrOlderThan(timestampMs: number): number {
   return result.changes
 }
 
+export function deleteOcrInRange(startMs: number, endMs: number): number {
+  const db = getDb()
+  const result = db
+    .delete(ocrResults)
+    .where(and(gte(ocrResults.timestamp, startMs), lte(ocrResults.timestamp, endMs)))
+    .run()
+  return result.changes
+}
+
 export function searchOcr(query: string, startMs?: number, endMs?: number): OcrSearchHit[] {
   const db = getDb()
   const conditions = [like(ocrResults.text, `%${query}%`)]

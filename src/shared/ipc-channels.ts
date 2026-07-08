@@ -3,7 +3,8 @@ export const IPC = {
     getByDate: 'screenshots:get-by-date',
     getAvailableDates: 'screenshots:get-available-dates',
     getDayBounds: 'screenshots:get-day-bounds',
-    getByTimeRange: 'screenshots:get-by-time-range'
+    getByTimeRange: 'screenshots:get-by-time-range',
+    deleteRange: 'screenshots:delete-range'
   },
   capture: {
     start: 'capture:start',

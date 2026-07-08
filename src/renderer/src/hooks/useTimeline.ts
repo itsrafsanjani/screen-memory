@@ -16,6 +16,7 @@ interface UseTimelineReturn {
   goToNextDate: () => void
   hasPreviousDate: boolean
   hasNextDate: boolean
+  reload: () => void
 }
 
 export function useTimeline(): UseTimelineReturn {
@@ -24,9 +25,9 @@ export function useTimeline(): UseTimelineReturn {
   const [availableDates, setAvailableDates] = useState<string[]>([])
   const [initializedDate, setInitializedDate] = useState<string | null>(null)
 
-  const { screenshots, dayBounds, loading } = useScreenshots(currentDate)
+  const { screenshots, dayBounds, loading, reload: reloadDay } = useScreenshots(currentDate)
 
-  useEffect(() => {
+  const refreshAvailableDates = useCallback(() => {
     window.electronAPI
       .getAvailableDates()
       .then((dates) => {
@@ -40,6 +41,15 @@ export function useTimeline(): UseTimelineReturn {
       })
       .catch(console.error)
   }, [currentDate])
+
+  useEffect(() => {
+    refreshAvailableDates()
+  }, [refreshAvailableDates])
+
+  const reload = useCallback(() => {
+    reloadDay()
+    refreshAvailableDates()
+  }, [reloadDay, refreshAvailableDates])
 
   // Set initial timestamp when a new day's bounds load
   useEffect(() => {
@@ -87,6 +97,7 @@ export function useTimeline(): UseTimelineReturn {
     goToPreviousDate,
     goToNextDate,
     hasPreviousDate,
-    hasNextDate
+    hasNextDate,
+    reload
   }
 }

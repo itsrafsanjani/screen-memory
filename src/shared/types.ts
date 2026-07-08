@@ -74,6 +74,10 @@ export interface ElectronAPI {
   getAvailableDates(): Promise<string[]>
   getDayBounds(date: string): Promise<DayBounds | null>
   getScreenshotsByTimeRange(start: number, end: number): Promise<ScreenshotRecord[]>
+  deleteScreenshotRange(
+    start: number,
+    end: number
+  ): Promise<{ deletedScreenshots: number; deletedOcr: number }>
 
   // Capture
   startCapture(): Promise<void>

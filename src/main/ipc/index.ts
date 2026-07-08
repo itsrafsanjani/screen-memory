@@ -20,7 +20,7 @@ export interface IpcRegistryContext {
 }
 
 export function registerAllIpcHandlers(ctx: IpcRegistryContext): void {
-  registerScreenshotHandlers()
+  registerScreenshotHandlers({ storage: ctx.storage })
   registerCaptureHandlers({ capture: ctx.capture, onStatusChange: ctx.onCaptureStatusChange })
   registerThemeHandlers()
   registerSettingsHandlers({ capture: ctx.capture, storage: ctx.storage })

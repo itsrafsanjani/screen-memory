@@ -1,6 +1,6 @@
 import { app } from 'electron'
-import { join } from 'path'
-import { mkdirSync, writeFileSync, existsSync, rmSync, readdirSync, statSync } from 'fs'
+import { join, dirname } from 'path'
+import { mkdirSync, writeFileSync, existsSync, rmSync, rmdirSync, readdirSync, statSync } from 'fs'
 import { format } from 'date-fns'
 import { MS_PER_DAY } from '../shared/constants'
 
@@ -47,6 +47,28 @@ export class StorageService {
     }
     walkDir(this.basePath)
     return totalBytes
+  }
+
+  deleteFiles(relativePaths: string[]): void {
+    const dayDirs = new Set<string>()
+    for (const relativePath of relativePaths) {
+      try {
+        rmSync(this.getAbsolutePath(relativePath), { force: true })
+        dayDirs.add(dirname(this.getAbsolutePath(relativePath)))
+      } catch (err) {
+        console.error('Failed to delete screenshot file:', relativePath, err)
+      }
+    }
+    // Prune day folders that are now empty
+    for (const dir of dayDirs) {
+      try {
+        if (existsSync(dir) && dir !== this.basePath && readdirSync(dir).length === 0) {
+          rmdirSync(dir)
+        }
+      } catch (err) {
+        console.error('Failed to prune empty screenshot dir:', dir, err)
+      }
+    }
   }
 
   cleanupOldData(retentionDays: number): string[] {

@@ -1,6 +1,7 @@
 import { TimelineTrack } from './TimelineTrack'
 import type { ScreenshotRecord, GitCommit } from '../../../types'
 import type { DayBounds } from '../../../types'
+import type { RangeSelection } from '../hooks/useRangeSelection'
 
 interface Props {
   screenshots: ScreenshotRecord[]
@@ -9,6 +10,9 @@ interface Props {
   onSeek: (timestamp: number) => void
   onHoverTimestamp?: (ts: number | null) => void
   gitCommits?: GitCommit[]
+  selectMode: boolean
+  selection: RangeSelection | null
+  onSelectionChange: (selection: RangeSelection | null) => void
 }
 
 export function Timeline({
@@ -17,7 +21,10 @@ export function Timeline({
   currentTimestamp,
   onSeek,
   onHoverTimestamp,
-  gitCommits
+  gitCommits,
+  selectMode,
+  selection,
+  onSelectionChange
 }: Props): React.JSX.Element {
   if (!dayBounds || screenshots.length === 0) {
     return (
@@ -38,6 +45,9 @@ export function Timeline({
         onSeek={onSeek}
         onHoverTimestamp={onHoverTimestamp}
         gitCommits={gitCommits}
+        selectMode={selectMode}
+        selection={selection}
+        onSelectionChange={onSelectionChange}
       />
     </div>
   )
