@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch makes the in-flight run obsolete.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Check and build (macOS)
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check formatting
+        run: pnpm exec prettier --check .
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Build Swift helpers
+        run: pnpm run build:swift
+
+      # electron-builder fails late and cryptically when an extraResources entry
+      # is missing, so fail here instead with a clear message.
+      - name: Verify Swift helper binaries
+        run: |
+          for binary in screen-memory-ocr screen-memory-appstate; do
+            path="swift-ocr/.build/release/$binary"
+            if [ ! -x "$path" ]; then
+              echo "::error::Expected Swift helper at $path"
+              exit 1
+            fi
+          done
+
+      - name: Build Electron app
+        run: pnpm exec electron-vite build && pnpm exec electron-builder --mac --dir
+
+      # The build is unsigned (`identity: null`), so an ad-hoc signature is what
+      # lets the packaged app launch at all on Apple silicon.
+      - name: Ad-hoc sign the app
+        run: codesign --deep --force --sign - "dist/mac-arm64/Screen Memory.app"
+
+      - name: Package
+        run: pnpm exec electron-builder --mac --publish never --prepackaged "dist/mac-arm64/Screen Memory.app"
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: screen-memory-macos-arm64
+          path: |
+            dist/*.dmg
+            dist/*.zip
+          if-no-files-found: error
+          retention-days: 14

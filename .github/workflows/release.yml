@@ -4,6 +4,13 @@ on:
   push:
     tags:
       - 'v*'
+  # Lets a release be cut from any branch without tagging first.
+  workflow_dispatch:
+    inputs:
+      prerelease:
+        description: 'Publish as a prerelease'
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -27,8 +34,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Build Swift OCR
-        run: cd swift-ocr && swift build -c release
+      - name: Build Swift helpers
+        run: pnpm run build:swift
 
       - name: Build Electron app
         run: pnpm exec electron-vite build && pnpm exec electron-builder --mac --dir
@@ -36,7 +43,16 @@ jobs:
       - name: Ad-hoc sign the app
         run: codesign --deep --force --sign - "dist/mac-arm64/Screen Memory.app"
 
+      # The publish target follows whichever repo is running this, so a fork
+      # releases to itself instead of failing against the upstream repo.
       - name: Package and publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm exec electron-builder --mac --publish always --prepackaged "dist/mac-arm64/Screen Memory.app"
+        run: |
+          pnpm exec electron-builder --mac \
+            --publish always \
+            --prepackaged "dist/mac-arm64/Screen Memory.app" \
+            -c.publish.provider=github \
+            -c.publish.owner="${{ github.repository_owner }}" \
+            -c.publish.repo="${{ github.event.repository.name }}" \
+            -c.publish.releaseType="${{ (github.event_name == 'workflow_dispatch' && inputs.prerelease) && 'prerelease' || 'release' }}"
