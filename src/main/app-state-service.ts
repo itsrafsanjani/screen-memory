@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'child_process'
-import { existsSync } from 'fs'
+import { accessSync, constants, existsSync } from 'fs'
 import { join } from 'path'
 import { app } from 'electron'
 import { z } from 'zod'
@@ -47,6 +47,7 @@ export class AppStateService {
   private binaryPath: string
   private child: ChildProcess | null = null
   private started = false
+  private available: boolean | null = null
   private stdoutBuffer = ''
 
   private queue: PendingRequest[] = []
@@ -76,7 +77,22 @@ export class AppStateService {
   }
 
   isAvailable(): boolean {
-    return process.platform === 'darwin' && existsSync(this.binaryPath)
+    if (this.available !== null) return this.available
+    if (process.platform !== 'darwin') {
+      this.available = false
+      return false
+    }
+    try {
+      // Existence alone isn't enough. A helper that lost its executable bit —
+      // a half-finished build, a copy through a filesystem that drops modes —
+      // fails inside spawn asynchronously, which surfaces as every request
+      // timing out instead of the clean "feature is off" path.
+      accessSync(this.binaryPath, constants.X_OK)
+      this.available = true
+    } catch {
+      this.available = false
+    }
+    return this.available
   }
 
   start(): void {
@@ -165,13 +181,33 @@ export class AppStateService {
   private pump(): void {
     if (this.inFlight || this.queue.length === 0) return
 
+    // A request that arrives after stop() used to restart the helper, which at
+    // quit meant spawning a process moments before the app went away.
+    if (!this.started) {
+      this.failPending(new Error('App state helper is not running'))
+      return
+    }
+
     if (!this.child) {
-      if (!this.started) this.started = true
+      // Spawning here regardless would defeat the backoff: against a helper
+      // that crashes on startup, the 2s usage poll would restart it forever.
+      // Callers all degrade to null/[], so failing now beats holding them for
+      // the length of the backoff.
+      if (this.respawnTimer) {
+        this.failPending(new Error('App state helper is restarting'))
+        return
+      }
       this.spawnChild()
       if (!this.child) {
         this.failPending(new Error('App state helper could not be started'))
         return
       }
+    }
+
+    const stdin = this.child.stdin
+    if (!stdin || !stdin.writable) {
+      this.handleChildFailure(new Error('App state helper stdin is closed'))
+      return
     }
 
     const next = this.queue.shift()!
@@ -188,7 +224,9 @@ export class AppStateService {
       this.scheduleRespawn()
     }, APP_STATE_REQUEST_TIMEOUT_MS)
 
-    this.child.stdin?.write(`${next.command}\n`)
+    stdin.write(`${next.command}\n`, (err) => {
+      if (err) this.handleChildFailure(err)
+    })
   }
 
   private spawnChild(): void {
@@ -212,8 +250,31 @@ export class AppStateService {
       const text = chunk.trim()
       if (text) console.error('App state helper:', text)
     })
-    this.child.on('error', (e) => console.error('App state helper error:', e))
-    this.child.on('exit', () => this.onExit())
+
+    // Every pipe needs its own listener. An 'error' with nothing listening is
+    // rethrown by Node and takes the main process down with it — and a write to
+    // a helper that died a moment ago raises exactly that as EPIPE on stdin.
+    for (const pipe of [this.child.stdin, this.child.stdout, this.child.stderr]) {
+      pipe?.on('error', (e: Error) => this.handleChildFailure(e))
+    }
+
+    this.child.on('error', (e) => this.handleChildFailure(e))
+    // 'close' rather than 'exit': when spawn itself fails — a binary that isn't
+    // executable or isn't a valid Mach-O — the process never runs, so 'exit'
+    // never fires and the dead child would be held forever.
+    this.child.on('close', () => this.onExit())
+  }
+
+  /**
+   * Any failure on the pipe leaves the helper's state unknowable: a partly
+   * written command would desync every reply after it. Tearing the process down
+   * and letting the backoff bring it back is the only safe recovery.
+   */
+  private handleChildFailure(error: Error): void {
+    console.error('App state helper error:', error)
+    this.killChild()
+    this.failPending(error)
+    if (this.started) this.scheduleRespawn()
   }
 
   private onStdout(chunk: string): void {
@@ -257,16 +318,26 @@ export class AppStateService {
   }
 
   private onExit(): void {
-    this.child = null
-    this.failPending(new Error('App state helper exited'))
-    if (this.started) this.scheduleRespawn()
+    this.handleChildFailure(new Error('App state helper exited'))
   }
 
   private killChild(): void {
     if (!this.child) return
     const child = this.child
     this.child = null
-    child.removeAllListeners('exit')
+    // Detach before killing. Left attached, this child's teardown would run
+    // handleChildFailure against whatever request the *next* child is already
+    // serving, and a line still buffered in its stdout would settle it.
+    child.removeAllListeners('close')
+    child.removeAllListeners('error')
+    child.stdout?.removeAllListeners('data')
+    // Swallowed rather than dropped: killing a process raises EPIPE on its
+    // pipes, and an 'error' with no listener is fatal in Node.
+    child.on('error', () => {})
+    for (const pipe of [child.stdin, child.stdout, child.stderr]) {
+      pipe?.removeAllListeners('error')
+      pipe?.on('error', () => {})
+    }
     child.kill()
   }
 
