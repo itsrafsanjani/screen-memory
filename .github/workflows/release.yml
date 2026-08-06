@@ -7,13 +7,23 @@ on:
   # Lets a release be cut from any branch without tagging first.
   workflow_dispatch:
     inputs:
-      prerelease:
-        description: 'Publish as a prerelease'
+      version:
+        description: 'Version to release, without the leading v (e.g. 0.2.0). Defaults to the version in package.json.'
+        type: string
+        required: false
+      draft:
+        description: 'Publish as a draft release'
         type: boolean
         default: true
 
 permissions:
   contents: write
+
+# Two releases writing assets to the same tag would race. Never cancel a run in
+# flight — a half-uploaded release is worse than a queued one.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -31,8 +41,59 @@ jobs:
           node-version: 20
           cache: pnpm
 
+      # electron-builder names the release after the package.json version, not
+      # the git ref, so pushing v0.2.0 without bumping package.json would quietly
+      # publish to v0.0.1 instead. Reconcile the two here and fail loudly rather
+      # than let the mismatch through.
+      - name: Resolve release version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          PKG_VERSION="$(node -p 'require("./package.json").version')"
+
+          if [ "${{ github.event_name }}" = 'push' ]; then
+            TAG_VERSION="${GITHUB_REF_NAME#v}"
+            if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+              echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $PKG_VERSION." \
+                   "Bump package.json to $TAG_VERSION and re-tag, or tag v$PKG_VERSION instead."
+              exit 1
+            fi
+            VERSION="$PKG_VERSION"
+          elif [ -n "$INPUT_VERSION" ]; then
+            VERSION="${INPUT_VERSION#v}"
+            npm pkg set version="$VERSION"
+          else
+            VERSION="$PKG_VERSION"
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing v$VERSION"
+
+      # electron-builder refuses to touch a published release older than two
+      # hours and still exits 0, so without this guard a rerun looks green while
+      # uploading nothing. Anything else would overwrite a live release's assets.
+      - name: Ensure the release tag is free
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if ! STATE="$(gh release view "$TAG" --json isDraft --jq '.isDraft' 2>/dev/null)"; then
+            echo "No existing release for $TAG."
+            exit 0
+          fi
+          if [ "$STATE" = 'true' ]; then
+            echo "A draft release for $TAG already exists; its assets will be replaced."
+            exit 0
+          fi
+          echo "::error::$TAG is already published. Bump the version instead of republishing it."
+          exit 1
+
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Build Swift helpers
         run: pnpm run build:swift
@@ -55,4 +116,14 @@ jobs:
             -c.publish.provider=github \
             -c.publish.owner="${{ github.repository_owner }}" \
             -c.publish.repo="${{ github.event.repository.name }}" \
-            -c.publish.releaseType="${{ (github.event_name == 'workflow_dispatch' && inputs.prerelease) && 'prerelease' || 'release' }}"
+            -c.publish.releaseType="${{ (github.event_name == 'workflow_dispatch' && inputs.draft) && 'draft' || 'release' }}"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: screen-memory-${{ steps.version.outputs.tag }}
+          path: |
+            dist/*.dmg
+            dist/*.zip
+          if-no-files-found: error
+          retention-days: 14
