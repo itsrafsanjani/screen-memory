@@ -4,7 +4,7 @@ import { join } from 'path'
 import Database from 'better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { initDb, getDbPath } from './client'
-import { migrateLegacyDatabase } from './legacy-migrator'
+import { migrateLegacyDatabase, recoverInterruptedSwap } from './legacy-migrator'
 import { IPC } from '../../shared/ipc-channels'
 
 export type MigrationPhase =
@@ -58,6 +58,12 @@ function emit(target: WebContents | null, progress: MigrationProgress): void {
 
 export async function runMigrationsIfNeeded(target: WebContents | null = null): Promise<void> {
   const dbPath = getDbPath()
+
+  // Has to run before anything reads the database path: a swap interrupted
+  // mid-flight leaves no live database, which would otherwise be taken for a
+  // fresh install and quietly replace the user's history with an empty one.
+  recoverInterruptedSwap()
+
   const needsLegacyImport = isLegacyDb(dbPath)
 
   if (needsLegacyImport) {
