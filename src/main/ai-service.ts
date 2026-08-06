@@ -2,6 +2,7 @@ import { BrowserWindow } from 'electron'
 import { getSetting } from './db/repositories/settings'
 import { getCommitsByDateRange } from './db/repositories/git'
 import { getOcrByTimeRange } from './db/repositories/ocr'
+import { getUsageTotals } from './db/repositories/app-usage'
 import { IPC } from '../shared/ipc-channels'
 import { DEFAULT_SUMMARY_PROMPT } from '../shared/prompts'
 
@@ -167,9 +168,23 @@ export class AiService {
     return `${start} - ${end}`
   }
 
+  private formatUsageDuration(ms: number): string {
+    const totalMinutes = Math.round(ms / 60000)
+    const hours = Math.floor(totalMinutes / 60)
+    const minutes = totalMinutes % 60
+    if (hours > 0) return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`
+    return `${minutes}m`
+  }
+
   private buildPrompt(startMs: number, endMs: number): string {
     // Get git commits for the period
     const commits = getCommitsByDateRange(startMs, endMs)
+
+    // Where the time actually went — only apps with at least a minute, so the
+    // list isn't padded out with incidental app switches.
+    const usage = getUsageTotals(startMs, endMs)
+      .filter((u) => u.duration_ms >= 60_000)
+      .slice(0, 15)
 
     // Get sampled OCR text — one sample every 5 minutes
     const ocrSamples: { timestamp: number; text: string }[] = []
@@ -238,6 +253,15 @@ export class AiService {
       }
     }
 
+    // Add per-app time totals
+    if (usage.length > 0) {
+      prompt += `## Raw Data: App Usage\n\n`
+      for (const app of usage) {
+        prompt += `- ${app.app_name} — ${this.formatUsageDuration(app.duration_ms)}\n`
+      }
+      prompt += '\n'
+    }
+
     // Add OCR samples grouped by hour
     if (ocrByHour.size > 0) {
       prompt += `## Raw Data: Screen Activity Samples (Supplementary)\n\n`
@@ -254,7 +278,7 @@ export class AiService {
       }
     }
 
-    if (commits.length === 0 && ocrSamples.length === 0) {
+    if (commits.length === 0 && ocrSamples.length === 0 && usage.length === 0) {
       prompt += `No activity data found for this period.\n`
     }
 

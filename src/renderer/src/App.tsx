@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTimeline } from './hooks/useTimeline'
+import { useDisplayFilter } from './hooks/useDisplayFilter'
 import { usePlayback } from './hooks/usePlayback'
 import { useGitCommits } from './hooks/useGitCommits'
 import { useSearch } from './hooks/useSearch'
@@ -8,6 +9,8 @@ import { useCaptureStatus } from './hooks/useCaptureStatus'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { useMigrationStatus } from './hooks/useMigrationStatus'
 import { DayPicker } from './components/DayPicker'
+import { DisplayFilter } from './components/DisplayFilter'
+import { UsageView } from './components/UsageView'
 import { PlaybackControls } from './components/PlaybackControls'
 import { SearchBar } from './components/SearchBar'
 import { SettingsDialog } from './components/Settings'
@@ -18,10 +21,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Separator } from '@/components/ui/separator'
-import { Settings, Sparkles, Monitor } from 'lucide-react'
+import { Settings, Sparkles, Monitor, Clock } from 'lucide-react'
 import type { ScreenshotRecord } from '../../types'
 
-type ViewMode = 'timeline' | 'summary'
+type ViewMode = 'timeline' | 'summary' | 'usage'
 
 function gitCommitsToScreenshotEntries(
   commits: ReturnType<typeof useGitCommits>
@@ -54,11 +57,20 @@ function App(): React.JSX.Element {
 
   const gitCommits = useGitCommits(currentDate)
 
+  // The display filter is applied here so the viewer, the timeline track and
+  // playback all step through the same frames.
+  const {
+    displays,
+    selectedDisplayId,
+    setSelectedDisplayId,
+    filtered: visibleScreenshots
+  } = useDisplayFilter(screenshots)
+
   const screenshotsWithCommits = useMemo(() => {
-    if (gitCommits.length === 0) return screenshots
+    if (gitCommits.length === 0) return visibleScreenshots
     const commitEntries = gitCommitsToScreenshotEntries(gitCommits)
-    return [...screenshots, ...commitEntries].sort((a, b) => a.timestamp - b.timestamp)
-  }, [screenshots, gitCommits])
+    return [...visibleScreenshots, ...commitEntries].sort((a, b) => a.timestamp - b.timestamp)
+  }, [visibleScreenshots, gitCommits])
 
   const {
     isPlaying,
@@ -73,6 +85,7 @@ function App(): React.JSX.Element {
 
   const [hoverTimestamp, setHoverTimestamp] = useState<number | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('timeline')
+  const [lightboxOpen, setLightboxOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const { query, results, searching, search, clearSearch } = useSearch()
   const { isRecording, toggleRecording } = useCaptureStatus()
@@ -80,7 +93,12 @@ function App(): React.JSX.Element {
   const migration = useMigrationStatus()
 
   useTheme()
-  useKeyboardShortcuts({ toggle, skipForward, skipBackward, cycleSpeedUp, cycleSpeedDown })
+  useKeyboardShortcuts(
+    { toggle, skipForward, skipBackward, cycleSpeedUp, cycleSpeedDown },
+    lightboxOpen
+  )
+
+  const handleLightboxOpenChange = useCallback((open: boolean) => setLightboxOpen(open), [])
 
   useEffect(() => {
     return window.electronAPI.onOpenSettings(() => setSettingsOpen(true))
@@ -128,6 +146,15 @@ function App(): React.JSX.Element {
               <Button
                 variant="ghost"
                 size="sm"
+                className={`h-6 px-2.5 ${viewMode === 'usage' ? 'bg-background shadow-sm rounded-md' : ''}`}
+                onClick={() => setViewMode('usage')}
+                title="App Usage"
+              >
+                <Clock className="h-3 w-3" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
                 className={`h-6 px-2.5 ${viewMode === 'summary' ? 'bg-background shadow-sm rounded-md' : ''}`}
                 onClick={() => setViewMode('summary')}
                 title="AI Summary"
@@ -135,6 +162,14 @@ function App(): React.JSX.Element {
                 <Sparkles className="h-3 w-3" />
               </Button>
             </div>
+
+            {viewMode === 'timeline' ? (
+              <DisplayFilter
+                displays={displays}
+                selectedDisplayId={selectedDisplayId}
+                onChange={setSelectedDisplayId}
+              />
+            ) : null}
           </div>
 
           <div className="no-drag absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
@@ -185,10 +220,12 @@ function App(): React.JSX.Element {
         {/* Main content area */}
         {viewMode === 'summary' ? (
           <SummaryView currentDate={currentDate} />
+        ) : viewMode === 'usage' ? (
+          <UsageView currentDate={currentDate} />
         ) : (
           <TimelineView
             loading={loading}
-            screenshots={screenshots}
+            screenshots={visibleScreenshots}
             screenshotsWithCommits={screenshotsWithCommits}
             gitCommits={gitCommits}
             dayBounds={dayBounds}
@@ -196,6 +233,7 @@ function App(): React.JSX.Element {
             hoverTimestamp={hoverTimestamp}
             setHoverTimestamp={setHoverTimestamp}
             onSeek={setCurrentTimestamp}
+            onLightboxOpenChange={handleLightboxOpenChange}
           />
         )}
       </div>

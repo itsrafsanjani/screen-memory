@@ -31,6 +31,17 @@
   --color-active: oklch(0.623 0.214 259.815);
   --color-playhead: oklch(0.637 0.237 25.331);
   --color-git-commit: oklch(0.696 0.17 162.48);
+
+  /* App usage palette — apps are hashed into these, so they need to read on
+     both themes; the per-theme values live in :root and .dark below. */
+  --color-usage-1: var(--usage-1);
+  --color-usage-2: var(--usage-2);
+  --color-usage-3: var(--usage-3);
+  --color-usage-4: var(--usage-4);
+  --color-usage-5: var(--usage-5);
+  --color-usage-6: var(--usage-6);
+  --color-usage-7: var(--usage-7);
+  --color-usage-8: var(--usage-8);
 }
 
 :root {
@@ -53,6 +64,15 @@
   --border: oklch(0.92 0.004 286.32);
   --input: oklch(0.92 0.004 286.32);
   --ring: oklch(0.141 0.005 285.823);
+
+  --usage-1: oklch(0.623 0.214 259.815);
+  --usage-2: oklch(0.646 0.166 162.48);
+  --usage-3: oklch(0.673 0.182 45.2);
+  --usage-4: oklch(0.606 0.222 310.5);
+  --usage-5: oklch(0.66 0.16 195.4);
+  --usage-6: oklch(0.658 0.196 12.4);
+  --usage-7: oklch(0.681 0.158 130.7);
+  --usage-8: oklch(0.638 0.152 285.9);
 }
 
 .dark {
@@ -75,6 +95,15 @@
   --border: oklch(0.274 0.006 286.033);
   --input: oklch(0.274 0.006 286.033);
   --ring: oklch(0.442 0.017 285.786);
+
+  --usage-1: oklch(0.707 0.165 254.624);
+  --usage-2: oklch(0.723 0.149 163.223);
+  --usage-3: oklch(0.75 0.16 55.934);
+  --usage-4: oklch(0.702 0.183 305.504);
+  --usage-5: oklch(0.746 0.13 197.023);
+  --usage-6: oklch(0.712 0.166 17.38);
+  --usage-7: oklch(0.768 0.153 132.6);
+  --usage-8: oklch(0.72 0.13 287.4);
 }
 
 /* Drag region utilities for hidden titlebar */

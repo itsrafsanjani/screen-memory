@@ -1,17 +1,21 @@
 import { desktopCapturer, screen } from 'electron'
 import { StorageService } from './storage-service'
+import { AppStateService } from './app-state-service'
 import { IdleDetector } from './idle-detector'
 import { insertScreenshot } from './db/repositories/screenshots'
 import {
   DEFAULT_ACTIVE_INTERVAL_MS,
+  DEFAULT_EXCLUSION_COVERAGE_PERCENT,
   DEFAULT_IDLE_INTERVAL_MS,
   DEFAULT_JPEG_QUALITY
 } from '../shared/constants'
+import type { DisplayWindow, ExcludedApp } from '../shared/types'
 
 export class CaptureService {
   private timer: ReturnType<typeof setTimeout> | null = null
   private running = false
   private storage: StorageService
+  private appState: AppStateService
   private idleDetector: IdleDetector
   private onStatusChanged?: (running: boolean) => void
   private onScreenshotCaptured?: (job: {
@@ -26,8 +30,15 @@ export class CaptureService {
   private idleIntervalMs = DEFAULT_IDLE_INTERVAL_MS
   private jpegQuality = DEFAULT_JPEG_QUALITY
 
-  constructor(storage: StorageService) {
+  private excludedBundleIds = new Set<string>()
+  private exclusionThresholdPercent = DEFAULT_EXCLUSION_COVERAGE_PERCENT
+  /** Display ids currently being skipped, so the log fires on transitions only. */
+  private skippedDisplayIds = new Set<string>()
+  private warnedDisplayIdMismatch = false
+
+  constructor(storage: StorageService, appState: AppStateService) {
     this.storage = storage
+    this.appState = appState
     this.idleDetector = new IdleDetector()
   }
 
@@ -51,6 +62,18 @@ export class CaptureService {
     if (activeMs !== undefined) this.activeIntervalMs = activeMs
     if (idleMs !== undefined) this.idleIntervalMs = idleMs
     if (quality !== undefined) this.jpegQuality = quality
+  }
+
+  /**
+   * Apps to keep out of screenshots, and how much of a display one of them has
+   * to cover before that display is skipped. The threshold lives here rather
+   * than in the native helper so it stays adjustable without a rebuild.
+   */
+  setExclusion(apps: ExcludedApp[], thresholdPercent?: number): void {
+    this.excludedBundleIds = new Set(apps.map((a) => a.bundleId))
+    if (thresholdPercent !== undefined && Number.isFinite(thresholdPercent)) {
+      this.exclusionThresholdPercent = Math.min(100, Math.max(1, thresholdPercent))
+    }
   }
 
   start(): void {
@@ -94,15 +117,21 @@ export class CaptureService {
 
       const timestamp = Date.now()
 
-      for (const source of sources) {
+      const targets = sources.map((source) => {
         const display = displays.find((d) => d.id.toString() === source.display_id)
+        return { source, displayId: source.display_id || display?.id.toString() || 'unknown' }
+      })
+      const frontWindows = await this.getFrontWindows(targets.map((t) => t.displayId))
+
+      for (const { source, displayId } of targets) {
+        if (this.shouldSkipDisplay(displayId, frontWindows.get(displayId))) continue
+
         const thumbnail = source.thumbnail
         if (thumbnail.isEmpty()) continue
 
         const jpegBuffer = thumbnail.toJPEG(this.jpegQuality)
         const width = thumbnail.getSize().width
         const height = thumbnail.getSize().height
-        const displayId = source.display_id || display?.id.toString() || 'unknown'
 
         const relativePath = this.storage.saveImage(timestamp, displayId, jpegBuffer)
 
@@ -130,5 +159,59 @@ export class CaptureService {
     } catch (err) {
       console.error('Capture failed:', err)
     }
+  }
+
+  /**
+   * The frontmost window on each display, keyed by the display id used by
+   * `desktopCapturer`. Empty when nothing is excluded, so the common case never
+   * pays for a helper round-trip.
+   */
+  private async getFrontWindows(displayIds: string[]): Promise<Map<string, DisplayWindow>> {
+    if (this.excludedBundleIds.size === 0) return new Map()
+
+    const state = await this.appState.getState()
+    if (!state || state.displays.length === 0) return new Map()
+
+    const byId = new Map(state.displays.map((d) => [d.displayId, d]))
+    if (displayIds.some((id) => byId.has(id))) return byId
+
+    // Electron's macOS Display.id is the CGDirectDisplayID the helper reports,
+    // so this should not happen — but if it ever does, a single display can
+    // still be matched unambiguously.
+    if (!this.warnedDisplayIdMismatch) {
+      this.warnedDisplayIdMismatch = true
+      console.warn(
+        'App state helper reported unknown display ids:',
+        [...byId.keys()].join(', '),
+        '- capture sources are:',
+        displayIds.join(', ')
+      )
+    }
+    if (displayIds.length === 1 && state.displays.length === 1) {
+      return new Map([[displayIds[0], state.displays[0]]])
+    }
+    return new Map()
+  }
+
+  private shouldSkipDisplay(displayId: string, front: DisplayWindow | undefined): boolean {
+    const skip =
+      !!front?.bundleId &&
+      this.excludedBundleIds.has(front.bundleId) &&
+      (front.coverage ?? 0) * 100 >= this.exclusionThresholdPercent
+
+    if (skip !== this.skippedDisplayIds.has(displayId)) {
+      if (skip) {
+        this.skippedDisplayIds.add(displayId)
+        console.log(
+          `Skipping display ${displayId}: ${front?.name ?? front?.bundleId} covers ` +
+            `${Math.round((front?.coverage ?? 0) * 100)}% of it`
+        )
+      } else {
+        this.skippedDisplayIds.delete(displayId)
+        console.log(`Resuming capture on display ${displayId}`)
+      }
+    }
+
+    return skip
   }
 }

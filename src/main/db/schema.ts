@@ -63,6 +63,24 @@ export const ocrResults = sqliteTable(
   ]
 )
 
+/**
+ * One contiguous stretch of an app being frontmost. The row is inserted when
+ * the segment opens and updated on every tick, so a crash loses at most one
+ * tick rather than the whole interval.
+ */
+export const appUsage = sqliteTable(
+  'app_usage',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    bundleId: text('bundle_id').notNull(),
+    appName: text('app_name').notNull(),
+    startedAt: integer('started_at').notNull(),
+    endedAt: integer('ended_at').notNull(),
+    durationMs: integer('duration_ms').notNull().default(0)
+  },
+  (t) => [index('idx_app_usage_started').on(t.startedAt)]
+)
+
 export type ScreenshotRow = typeof screenshots.$inferSelect
 export type NewScreenshot = typeof screenshots.$inferInsert
 export type GitCommitRow = typeof gitCommits.$inferSelect
@@ -70,3 +88,5 @@ export type NewGitCommit = typeof gitCommits.$inferInsert
 export type GitRepoRow = typeof gitRepos.$inferSelect
 export type OcrResultRow = typeof ocrResults.$inferSelect
 export type NewOcrResult = typeof ocrResults.$inferInsert
+export type AppUsageRow = typeof appUsage.$inferSelect
+export type NewAppUsage = typeof appUsage.$inferInsert

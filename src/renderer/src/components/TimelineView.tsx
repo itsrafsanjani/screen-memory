@@ -14,6 +14,7 @@ interface Props {
   hoverTimestamp: number | null
   setHoverTimestamp: Dispatch<SetStateAction<number | null>>
   onSeek: (timestamp: number) => void
+  onLightboxOpenChange: (open: boolean) => void
 }
 
 export function TimelineView({
@@ -25,7 +26,8 @@ export function TimelineView({
   currentTimestamp,
   hoverTimestamp,
   setHoverTimestamp,
-  onSeek
+  onSeek,
+  onLightboxOpenChange
 }: Props): React.JSX.Element {
   return (
     <>
@@ -39,6 +41,7 @@ export function TimelineView({
             screenshots={screenshots}
             currentTimestamp={currentTimestamp}
             hoverTimestamp={hoverTimestamp}
+            onLightboxOpenChange={onLightboxOpenChange}
           />
           <DetailSidebar
             commits={gitCommits}
