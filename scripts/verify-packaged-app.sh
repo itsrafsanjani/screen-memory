@@ -9,7 +9,8 @@
 # cannot open its database.
 set -euo pipefail
 
-APP="${1:?usage: verify-packaged-app.sh <path to .app>}"
+APP="${1:?usage: verify-packaged-app.sh <path to .app> [arch]}"
+ARCH="${2:-$(uname -m)}"
 RESOURCES="$APP/Contents/Resources"
 
 fail() {
@@ -38,8 +39,10 @@ for binary in screen-memory-ocr screen-memory-appstate; do
   path="$RESOURCES/bin/$binary"
   [ -x "$path" ] || fail "Missing or non-executable helper: $path"
   # A helper built for the wrong architecture spawns and dies, which the app
-  # reports as "feature unavailable" rather than as a broken build.
-  file "$path" | grep -q 'Mach-O' || fail "$path is not a Mach-O executable"
+  # reports as "feature unavailable" rather than as a broken build. `file` alone
+  # would accept an x86_64 binary in an arm64 bundle, so the arch is checked.
+  archs="$(lipo -archs "$path" 2>/dev/null)" || fail "$path is not a Mach-O executable"
+  echo "$archs" | grep -qw "$ARCH" || fail "$path is $archs, expected $ARCH"
 done
 
-echo "Packaged app looks complete: $APP"
+echo "Packaged app looks complete: $APP ($ARCH)"

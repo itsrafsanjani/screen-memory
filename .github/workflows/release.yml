@@ -102,7 +102,7 @@ jobs:
         run: pnpm exec electron-vite build && pnpm exec electron-builder --mac --dir
 
       - name: Verify the packaged app is complete
-        run: ./scripts/verify-packaged-app.sh "dist/mac-arm64/Screen Memory.app"
+        run: ./scripts/verify-packaged-app.sh "dist/mac-arm64/Screen Memory.app" arm64
 
       - name: Ad-hoc sign the app
         run: codesign --deep --force --sign - "dist/mac-arm64/Screen Memory.app"
