@@ -43,3 +43,10 @@ export const DEFAULT_USAGE_RETENTION_DAYS = 365
 
 // Time helpers
 export const MS_PER_DAY = 24 * 60 * 60 * 1000
+
+/**
+ * Longest a single usage segment may run before it is rolled over into a new
+ * one. Day queries bound their index scan by this, so a segment that outran it
+ * would disappear from every day it covers but the first.
+ */
+export const MAX_SEGMENT_SPAN_MS = MS_PER_DAY

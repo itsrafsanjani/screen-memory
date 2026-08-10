@@ -2,7 +2,7 @@ import { and, asc, desc, eq, gte, lte, sql } from 'drizzle-orm'
 import { getDb } from '../client'
 import { dayStartEnd } from '../day-range'
 import { appUsage } from '../schema'
-import { MS_PER_DAY } from '../../../shared/constants'
+import { MAX_SEGMENT_SPAN_MS } from '../../../shared/constants'
 import type { AppUsageSegment, AppUsageTotal } from '../../../shared/types'
 
 function toRow(r: {
@@ -61,11 +61,11 @@ export function touchSegment(id: number, endedAt: number): void {
  *
  * `ended_at >= start` alone can't be answered from `idx_app_usage_started`, so
  * every day query degenerates into a scan of the whole table as history builds
- * up. A segment is closed on idle (two minutes), on sleep, on lock and at quit,
- * so it can only outlive a day if the machine is used continuously — a full day
- * of slack makes the bound a formality while keeping the scan bounded.
+ * up. This bound keeps the scan indexed, and is only correct because
+ * `UsageService` rolls a segment over once it reaches `MAX_SEGMENT_SPAN_MS` —
+ * without that, a longer segment would silently vanish from every day it covers
+ * but the first.
  */
-const MAX_SEGMENT_SPAN_MS = MS_PER_DAY
 
 /** Segments overlapping the range, in start order. */
 export function getUsageByRange(start: number, end: number): AppUsageSegment[] {

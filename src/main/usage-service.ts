@@ -2,7 +2,11 @@ import { powerMonitor } from 'electron'
 import { AppStateService } from './app-state-service'
 import { IdleDetector } from './idle-detector'
 import { openSegment, touchSegment } from './db/repositories/app-usage'
-import { IDLE_THRESHOLD_SECONDS, USAGE_POLL_INTERVAL_MS } from '../shared/constants'
+import {
+  IDLE_THRESHOLD_SECONDS,
+  MAX_SEGMENT_SPAN_MS,
+  USAGE_POLL_INTERVAL_MS
+} from '../shared/constants'
 
 interface OpenSegment {
   id: number
@@ -88,7 +92,15 @@ export class UsageService {
       }
 
       const now = Date.now()
-      if (this.current && this.current.bundleId === frontmost.bundleId) {
+      if (
+        this.current &&
+        this.current.bundleId === frontmost.bundleId &&
+        // Day queries only look back MAX_SEGMENT_SPAN_MS for a segment that
+        // might overlap them, so one allowed to run longer would vanish from
+        // every day it covers but the first. Rolling over keeps that bound true
+        // however long the machine is driven without an idle stretch.
+        now - this.current.startedAt < MAX_SEGMENT_SPAN_MS
+      ) {
         touchSegment(this.current.id, now)
         return
       }
