@@ -122,10 +122,14 @@ export class AppStateService {
   /**
    * Memoized for APP_STATE_CACHE_MS. Concurrent callers within the window share
    * one round-trip; on any failure the caller gets null rather than a rejection.
+   *
+   * `maxAgeMs` lets a caller that must see the world *now* opt out of the cache
+   * — capture re-reads after grabbing pixels, and a cached answer from before
+   * the grab would defeat the point of asking twice.
    */
-  async getState(): Promise<AppState | null> {
+  async getState(maxAgeMs: number = APP_STATE_CACHE_MS): Promise<AppState | null> {
     const now = Date.now()
-    if (this.cachedState && now - this.cachedStateAt < APP_STATE_CACHE_MS) {
+    if (this.cachedState && now - this.cachedStateAt < maxAgeMs) {
       return this.cachedState
     }
     if (this.inFlightState) return this.inFlightState

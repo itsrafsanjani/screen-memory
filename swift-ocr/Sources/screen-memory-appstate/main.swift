@@ -83,27 +83,55 @@ func frontmostPayload() -> [String: Any]? {
     ]
 }
 
+func overlapArea(_ a: CGRect, _ b: CGRect) -> CGFloat {
+    let overlap = a.intersection(b)
+    guard !overlap.isNull, !overlap.isEmpty else { return 0 }
+    return overlap.width * overlap.height
+}
+
+/// The display a window predominantly occupies, or nil if it touches none.
+///
+/// Any intersection at all used to be enough to call a window a display's
+/// frontmost one. A window spilling a few pixels onto the neighbouring screen
+/// would therefore be reported as *that* screen's dominant app and mask the app
+/// actually filling it — silently disabling exclusion on a monitor. Assigning
+/// each window to a single home display makes the spill-over case fall through
+/// to the window that really is in front there.
+func homeDisplay(for rect: CGRect, among displays: [(id: CGDirectDisplayID, rect: CGRect)])
+    -> CGDirectDisplayID?
+{
+    var best: (id: CGDirectDisplayID, area: CGFloat)?
+    for display in displays {
+        let area = overlapArea(rect, display.rect)
+        guard area > 0 else { continue }
+        if best == nil || area > best!.area { best = (display.id, area) }
+    }
+    return best?.id
+}
+
 func statePayload() -> [String: Any] {
     let windows = onScreenWindows()
+    let activeList = activeDisplays().map { (id: $0, rect: CGDisplayBounds($0)) }
+    // Computed once for all displays: with N displays and M windows this is the
+    // difference between N*M and M passes.
+    let homes = windows.map { homeDisplay(for: $0.rect, among: activeList) }
+
     var displays: [[String: Any]] = []
 
-    for displayId in activeDisplays() {
-        let displayRect = CGDisplayBounds(displayId)
-        let displayArea = displayRect.width * displayRect.height
+    for display in activeList {
+        let displayArea = display.rect.width * display.rect.height
         guard displayArea > 0 else { continue }
 
-        var entry: [String: Any] = ["displayId": String(displayId)]
+        var entry: [String: Any] = ["displayId": String(display.id)]
 
-        // Only the frontmost window on this display is considered. If its owner
-        // can't be identified we report the display with no dominant app rather
-        // than falling through to the window behind it — reporting a covered-up
-        // app as dominant would exclude a screen the user can actually see.
-        if let front = windows.first(where: {
-            let overlap = $0.rect.intersection(displayRect)
-            return !overlap.isNull && !overlap.isEmpty
-        }), let info = appInfo(for: front.pid) {
-            let overlap = front.rect.intersection(displayRect)
-            let coverage = min(max(Double((overlap.width * overlap.height) / displayArea), 0), 1)
+        // Only the frontmost window whose home is this display is considered. If
+        // its owner can't be identified we report the display with no dominant
+        // app rather than falling through to the window behind it — reporting a
+        // covered-up app as dominant would exclude a screen the user can see.
+        if let front = windows.indices.first(where: { homes[$0] == display.id }),
+           let info = appInfo(for: windows[front].pid) {
+            let area = overlapArea(windows[front].rect, display.rect)
+            let coverage = min(max(Double(area / displayArea), 0), 1)
             entry["bundleId"] = info.bundleId
             entry["name"] = info.name
             entry["coverage"] = coverage

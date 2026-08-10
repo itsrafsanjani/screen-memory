@@ -110,6 +110,15 @@ export class CaptureService {
     try {
       const idle = this.idleDetector.isIdle()
       const displays = screen.getAllDisplays()
+
+      // getSources() grabs the pixels somewhere inside its own await, so a
+      // single check can always be on the wrong side of it: check only before
+      // and an app that comes forward during the grab lands in the archive;
+      // check only after and one that was excluded at grab time is captured
+      // because it has since been dismissed. Both reads have to agree that the
+      // display is clear.
+      const before = await this.getFrontWindows(displays.map((d) => d.id.toString()))
+
       const sources = await desktopCapturer.getSources({
         types: ['screen'],
         thumbnailSize: { width: 1920, height: 1080 }
@@ -121,10 +130,17 @@ export class CaptureService {
         const display = displays.find((d) => d.id.toString() === source.display_id)
         return { source, displayId: source.display_id || display?.id.toString() || 'unknown' }
       })
-      const frontWindows = await this.getFrontWindows(targets.map((t) => t.displayId))
+      const after = await this.getFrontWindows(
+        targets.map((t) => t.displayId),
+        // Freshness is the whole point of the second read, so it bypasses the
+        // memo the first one just filled.
+        0
+      )
 
       for (const { source, displayId } of targets) {
-        if (this.shouldSkipDisplay(displayId, frontWindows.get(displayId))) continue
+        if (this.shouldSkipDisplay(displayId, [before.get(displayId), after.get(displayId)])) {
+          continue
+        }
 
         const thumbnail = source.thumbnail
         if (thumbnail.isEmpty()) continue
@@ -166,10 +182,13 @@ export class CaptureService {
    * `desktopCapturer`. Empty when nothing is excluded, so the common case never
    * pays for a helper round-trip.
    */
-  private async getFrontWindows(displayIds: string[]): Promise<Map<string, DisplayWindow>> {
+  private async getFrontWindows(
+    displayIds: string[],
+    maxAgeMs?: number
+  ): Promise<Map<string, DisplayWindow>> {
     if (this.excludedBundleIds.size === 0) return new Map()
 
-    const state = await this.appState.getState()
+    const state = await this.appState.getState(maxAgeMs)
     if (!state || state.displays.length === 0) return new Map()
 
     const byId = new Map(state.displays.map((d) => [d.displayId, d]))
@@ -193,18 +212,24 @@ export class CaptureService {
     return new Map()
   }
 
-  private shouldSkipDisplay(displayId: string, front: DisplayWindow | undefined): boolean {
-    const skip =
+  private isExcluded(front: DisplayWindow | undefined): boolean {
+    return (
       !!front?.bundleId &&
       this.excludedBundleIds.has(front.bundleId) &&
       (front.coverage ?? 0) * 100 >= this.exclusionThresholdPercent
+    )
+  }
 
-    if (skip !== this.skippedDisplayIds.has(displayId)) {
-      if (skip) {
+  /** Skips the display if *any* of the reads around the grab saw an excluded app. */
+  private shouldSkipDisplay(displayId: string, fronts: Array<DisplayWindow | undefined>): boolean {
+    const trigger = fronts.find((front) => this.isExcluded(front))
+
+    if ((trigger !== undefined) !== this.skippedDisplayIds.has(displayId)) {
+      if (trigger) {
         this.skippedDisplayIds.add(displayId)
         console.log(
-          `Skipping display ${displayId}: ${front?.name ?? front?.bundleId} covers ` +
-            `${Math.round((front?.coverage ?? 0) * 100)}% of it`
+          `Skipping display ${displayId}: ${trigger.name ?? trigger.bundleId} covers ` +
+            `${Math.round((trigger.coverage ?? 0) * 100)}% of it`
         )
       } else {
         this.skippedDisplayIds.delete(displayId)
@@ -212,6 +237,6 @@ export class CaptureService {
       }
     }
 
-    return skip
+    return trigger !== undefined
   }
 }
