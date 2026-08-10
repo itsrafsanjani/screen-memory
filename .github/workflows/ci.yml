@@ -59,6 +59,21 @@ jobs:
       - name: Build Electron app
         run: pnpm exec electron-vite build && pnpm exec electron-builder --mac --dir
 
+      # electron-builder writes this itself only during a pack whose targets
+      # include dmg/zip, and the `--dir` then `--prepackaged` split never
+      # satisfies that — so the updater would ship with no feed and fail
+      # silently at startup. Written before the ad-hoc signature so the seal
+      # covers it. Owner/repo come from the running repo, matching the publish
+      # step, so a fork's builds update from the fork.
+      - name: Write the auto-update feed
+        run: |
+          cat > "dist/mac-arm64/Screen Memory.app/Contents/Resources/app-update.yml" <<EOF
+          provider: github
+          owner: ${{ github.repository_owner }}
+          repo: ${{ github.event.repository.name }}
+          updaterCacheDirName: screen-memory-updater
+          EOF
+
       - name: Verify the packaged app is complete
         run: ./scripts/verify-packaged-app.sh "dist/mac-arm64/Screen Memory.app" arm64
 

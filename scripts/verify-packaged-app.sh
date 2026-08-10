@@ -45,4 +45,13 @@ for binary in screen-memory-ocr screen-memory-appstate; do
   echo "$archs" | grep -qw "$ARCH" || fail "$path is $archs, expected $ARCH"
 done
 
+# Not an extraResources entry but the same class of failure: electron-builder
+# only writes this during a pack whose targets include dmg/zip, which the
+# `--dir` then `--prepackaged` split never satisfies. Without it the in-app
+# updater has no feed and every check fails at startup, swallowed by the error
+# handler. The workflows write it explicitly; this makes sure they kept doing so.
+UPDATE_YML="$RESOURCES/app-update.yml"
+[ -f "$UPDATE_YML" ] || fail "Missing $UPDATE_YML — the in-app updater will fail at startup"
+grep -q '^provider:' "$UPDATE_YML" || fail "$UPDATE_YML has no provider"
+
 echo "Packaged app looks complete: $APP ($ARCH)"
