@@ -59,6 +59,9 @@ jobs:
       - name: Build Electron app
         run: pnpm exec electron-vite build && pnpm exec electron-builder --mac --dir
 
+      - name: Verify the packaged app is complete
+        run: ./scripts/verify-packaged-app.sh "dist/mac-arm64/Screen Memory.app"
+
       # The build is unsigned (`identity: null`), so an ad-hoc signature is what
       # lets the packaged app launch at all on Apple silicon.
       - name: Ad-hoc sign the app
