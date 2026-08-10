@@ -75,6 +75,7 @@ function App(): React.JSX.Element {
   const {
     isPlaying,
     speed,
+    stop,
     toggle,
     skipForward,
     skipBackward,
@@ -98,7 +99,16 @@ function App(): React.JSX.Element {
     lightboxOpen
   )
 
-  const handleLightboxOpenChange = useCallback((open: boolean) => setLightboxOpen(open), [])
+  // Playback keeps moving the current timestamp under the lightbox, which is
+  // both disorienting and pointless while a modal covers the timeline — so
+  // opening it stops playback rather than merely muting the keyboard shortcuts.
+  const handleLightboxOpenChange = useCallback(
+    (open: boolean) => {
+      setLightboxOpen(open)
+      if (open) stop()
+    },
+    [stop]
+  )
 
   useEffect(() => {
     return window.electronAPI.onOpenSettings(() => setSettingsOpen(true))
@@ -226,6 +236,7 @@ function App(): React.JSX.Element {
           <TimelineView
             loading={loading}
             screenshots={visibleScreenshots}
+            displays={displays}
             screenshotsWithCommits={screenshotsWithCommits}
             gitCommits={gitCommits}
             dayBounds={dayBounds}

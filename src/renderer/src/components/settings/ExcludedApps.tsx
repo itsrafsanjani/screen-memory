@@ -17,6 +17,12 @@ interface Props {
   updateSetting: (key: string, value: string) => Promise<void>
 }
 
+const DEFAULT_THRESHOLD = '80'
+
+function isValidThreshold(value: number): boolean {
+  return Number.isFinite(value) && value >= 1 && value <= 100
+}
+
 function parseExcluded(raw: string): ExcludedApp[] {
   try {
     const parsed: unknown = JSON.parse(raw)
@@ -34,6 +40,10 @@ export function ExcludedApps({ getSetting, updateSetting }: Props): React.JSX.El
   const [available, setAvailable] = useState(true)
   const [runningApps, setRunningApps] = useState<RunningApp[]>([])
   const [error, setError] = useState<string | null>(null)
+  /** Non-null only while the coverage field is being edited. */
+  const [threshold, setThreshold] = useState<string | null>(null)
+
+  const savedThreshold = getSetting('capture.exclusionCoverageThreshold', DEFAULT_THRESHOLD)
 
   const excluded = useMemo(
     () => parseExcluded(getSetting('capture.excludedApps', '[]')),
@@ -157,14 +167,33 @@ export function ExcludedApps({ getSetting, updateSetting }: Props): React.JSX.El
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
 
       <div className="space-y-2">
-        <Label>Screen Coverage (%)</Label>
+        <Label htmlFor="exclusion-coverage">Screen Coverage (%)</Label>
         <Input
+          id="exclusion-coverage"
           type="number"
           min="1"
           max="100"
           disabled={!available}
-          value={getSetting('capture.exclusionCoverageThreshold', '80')}
-          onChange={(e) => updateSetting('capture.exclusionCoverageThreshold', e.target.value)}
+          // `min`/`max` only colour the field; nothing stops a typed 0 or 500
+          // from being saved and applied, so the value is clamped here too.
+          value={threshold ?? savedThreshold}
+          onChange={(e) => {
+            setThreshold(e.target.value)
+            const parsed = Number(e.target.value)
+            // While the field is mid-edit ("" on the way to 90, or 1 on the way
+            // to 100) there is nothing meaningful to save yet; blur commits it.
+            if (isValidThreshold(parsed)) {
+              void updateSetting('capture.exclusionCoverageThreshold', String(Math.round(parsed)))
+            }
+          }}
+          onBlur={() => {
+            const parsed = Number(threshold ?? savedThreshold)
+            const clamped = Number.isFinite(parsed)
+              ? Math.min(100, Math.max(1, Math.round(parsed)))
+              : DEFAULT_THRESHOLD
+            setThreshold(null)
+            void updateSetting('capture.exclusionCoverageThreshold', String(clamped))
+          }}
           className="w-24"
         />
         <p className="text-xs text-muted-foreground">
