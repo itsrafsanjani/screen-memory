@@ -187,12 +187,19 @@ export function ExcludedApps({ getSetting, updateSetting }: Props): React.JSX.El
             }
           }}
           onBlur={() => {
-            const parsed = Number(threshold ?? savedThreshold)
-            const clamped = Number.isFinite(parsed)
-              ? Math.min(100, Math.max(1, Math.round(parsed)))
-              : DEFAULT_THRESHOLD
+            const draft = threshold
             setThreshold(null)
-            void updateSetting('capture.exclusionCoverageThreshold', String(clamped))
+            // An emptied or half-typed field means "no new value", not zero.
+            // Number('') is 0, which would otherwise clamp up to 1 and quietly
+            // set the threshold so low that an excluded app showing a sliver of
+            // itself blanks a whole display out of the archive.
+            if (draft === null || draft.trim() === '') return
+            const parsed = Number(draft)
+            if (!Number.isFinite(parsed)) return
+            void updateSetting(
+              'capture.exclusionCoverageThreshold',
+              String(Math.min(100, Math.max(1, Math.round(parsed))))
+            )
           }}
           className="w-24"
         />
