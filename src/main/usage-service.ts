@@ -2,11 +2,12 @@ import { powerMonitor } from 'electron'
 import { AppStateService } from './app-state-service'
 import { IdleDetector } from './idle-detector'
 import { openSegment, touchSegment } from './db/repositories/app-usage'
-import { USAGE_POLL_INTERVAL_MS } from '../shared/constants'
+import { IDLE_THRESHOLD_SECONDS, USAGE_POLL_INTERVAL_MS } from '../shared/constants'
 
 interface OpenSegment {
   id: number
   bundleId: string
+  startedAt: number
 }
 
 /**
@@ -33,8 +34,8 @@ export class UsageService {
 
     // The machine going to sleep or locking ends the segment where it stands;
     // without this the next tick after waking would stretch it across the gap.
-    powerMonitor.on('suspend', this.closeSegment)
-    powerMonitor.on('lock-screen', this.closeSegment)
+    powerMonitor.on('suspend', this.onPowerEvent)
+    powerMonitor.on('lock-screen', this.onPowerEvent)
   }
 
   stop(): void {
@@ -42,15 +43,24 @@ export class UsageService {
       clearInterval(this.timer)
       this.timer = null
     }
-    powerMonitor.off('suspend', this.closeSegment)
-    powerMonitor.off('lock-screen', this.closeSegment)
+    powerMonitor.off('suspend', this.onPowerEvent)
+    powerMonitor.off('lock-screen', this.onPowerEvent)
     this.closeSegment()
   }
 
   /** Bound so it can be added to and removed from powerMonitor by identity. */
-  private closeSegment = (): void => {
+  private onPowerEvent = (): void => {
+    this.closeSegment()
+  }
+
+  /**
+   * Ends the open segment. `endedAt` never runs behind the segment's own start:
+   * an app that came forward inside an already-idle stretch would otherwise be
+   * closed before it opened.
+   */
+  private closeSegment(endedAt: number = Date.now()): void {
     if (!this.current) return
-    touchSegment(this.current.id, Date.now())
+    touchSegment(this.current.id, Math.max(this.current.startedAt, endedAt))
     this.current = null
   }
 
@@ -59,8 +69,12 @@ export class UsageService {
     if (this.ticking) return
     this.ticking = true
     try {
-      if (this.idleDetector.isIdle()) {
-        this.closeSegment()
+      const idleSeconds = this.idleDetector.getIdleSeconds()
+      if (idleSeconds > IDLE_THRESHOLD_SECONDS) {
+        // The user stopped working when the idle clock started, not when this
+        // tick noticed. Closing at `now` would credit the app with the whole
+        // idle threshold — two minutes per idle stretch, every time.
+        this.closeSegment(Date.now() - idleSeconds * 1000)
         return
       }
 
@@ -86,7 +100,8 @@ export class UsageService {
           appName: frontmost.name,
           startedAt: now
         }),
-        bundleId: frontmost.bundleId
+        bundleId: frontmost.bundleId,
+        startedAt: now
       }
     } catch (e) {
       console.error('Usage tracking tick failed:', e)

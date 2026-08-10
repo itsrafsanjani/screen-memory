@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Clock } from 'lucide-react'
+import { Clock, TriangleAlert } from 'lucide-react'
 import type { AppUsageSegment } from '../../../types'
 import { useAppUsage } from '../hooks/useAppUsage'
 import { formatDuration } from '../lib/format'
@@ -105,12 +105,14 @@ function summarize(
 }
 
 export function UsageView({ currentDate }: Props): React.JSX.Element {
-  const { segments, loading, available } = useAppUsage(currentDate)
+  const { segments, loading, available, error } = useAppUsage(currentDate)
 
   const { totals, totalMs, buckets } = useMemo(() => {
     const { start, end } = dayBounds(currentDate)
     return summarize(segments, start, end)
   }, [segments, currentDate])
+
+  const nameFor = useMemo(() => new Map(totals.map((t) => [t.bundleId, t.name])), [totals])
 
   const busiestHourMs = useMemo(
     () => Math.max(1, ...buckets.map((b) => [...b.values()].reduce((sum, ms) => sum + ms, 0))),
@@ -121,6 +123,18 @@ export function UsageView({ currentDate }: Props): React.JSX.Element {
     return (
       <div className="flex-1 flex items-center justify-center text-muted-foreground">
         Loading...
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-muted-foreground">
+        <div className="text-center max-w-sm">
+          <TriangleAlert className="size-12 mx-auto mb-3 opacity-20" />
+          <p>Could not load app usage for this day</p>
+          <p className="text-sm mt-1 text-destructive">{error}</p>
+        </div>
       </div>
     )
   }
@@ -172,8 +186,13 @@ export function UsageView({ currentDate }: Props): React.JSX.Element {
                     {entries.map(([bundleId, ms]) => (
                       <div
                         key={bundleId}
-                        className={colorFor(bundleId)}
+                        // A hairline of page background on the leading edge of
+                        // every band. Two apps that hash to neighbouring hues
+                        // otherwise read as one block. Drawn as an inset shadow
+                        // rather than a border so it costs the band no height.
+                        className={`${colorFor(bundleId)} shadow-[inset_0_1px_0_0_var(--background)]`}
                         style={{ height: `${(ms / hourMs) * 100}%` }}
+                        title={`${nameFor.get(bundleId) ?? bundleId} — ${formatDuration(ms)}`}
                       />
                     ))}
                   </div>

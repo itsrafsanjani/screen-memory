@@ -29,6 +29,14 @@ export function registerAppsHandlers(ctx: Ctx): void {
       ? await dialog.showOpenDialog(win, options)
       : await dialog.showOpenDialog(options)
     if (result.canceled || result.filePaths.length === 0) return null
-    return ctx.appState.readAppBundle(result.filePaths[0])
+
+    const picked = result.filePaths[0]
+    const bundle = await ctx.appState.readAppBundle(picked)
+    // null is how the renderer hears "cancelled", so an unreadable bundle has to
+    // throw — otherwise picking a broken .app silently does nothing at all.
+    if (!bundle) {
+      throw new Error(`Could not read an application bundle at ${picked}`)
+    }
+    return bundle
   })
 }

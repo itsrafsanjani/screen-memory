@@ -2,6 +2,7 @@ import { and, asc, desc, eq, gte, lte, sql } from 'drizzle-orm'
 import { getDb } from '../client'
 import { dayStartEnd } from '../day-range'
 import { appUsage } from '../schema'
+import { MS_PER_DAY } from '../../../shared/constants'
 import type { AppUsageSegment, AppUsageTotal } from '../../../shared/types'
 
 function toRow(r: {
@@ -55,13 +56,30 @@ export function touchSegment(id: number, endedAt: number): void {
     .run()
 }
 
+/**
+ * How far before a range a segment may have started and still overlap it.
+ *
+ * `ended_at >= start` alone can't be answered from `idx_app_usage_started`, so
+ * every day query degenerates into a scan of the whole table as history builds
+ * up. A segment is closed on idle (two minutes), on sleep, on lock and at quit,
+ * so it can only outlive a day if the machine is used continuously — a full day
+ * of slack makes the bound a formality while keeping the scan bounded.
+ */
+const MAX_SEGMENT_SPAN_MS = MS_PER_DAY
+
 /** Segments overlapping the range, in start order. */
 export function getUsageByRange(start: number, end: number): AppUsageSegment[] {
   const db = getDb()
   const rows = db
     .select()
     .from(appUsage)
-    .where(and(lte(appUsage.startedAt, end), gte(appUsage.endedAt, start)))
+    .where(
+      and(
+        gte(appUsage.startedAt, start - MAX_SEGMENT_SPAN_MS),
+        lte(appUsage.startedAt, end),
+        gte(appUsage.endedAt, start)
+      )
+    )
     .orderBy(asc(appUsage.startedAt))
     .all()
   return rows.map(toRow)
@@ -78,8 +96,11 @@ export function getUsageByDate(dateStr: string): AppUsageSegment[] {
  */
 export function getUsageTotals(start: number, end: number): AppUsageTotal[] {
   const db = getDb()
+  // The per-segment max(0, …) is what keeps a zero-length segment sitting
+  // exactly on the boundary — the row an open segment starts life as — from
+  // subtracting real time from the app's total.
   const clamped = sql<number>`sum(
-    min(${appUsage.endedAt}, ${end}) - max(${appUsage.startedAt}, ${start})
+    max(0, min(${appUsage.endedAt}, ${end}) - max(${appUsage.startedAt}, ${start}))
   )`
   const rows = db
     .select({
@@ -88,7 +109,13 @@ export function getUsageTotals(start: number, end: number): AppUsageTotal[] {
       duration_ms: clamped
     })
     .from(appUsage)
-    .where(and(lte(appUsage.startedAt, end), gte(appUsage.endedAt, start)))
+    .where(
+      and(
+        gte(appUsage.startedAt, start - MAX_SEGMENT_SPAN_MS),
+        lte(appUsage.startedAt, end),
+        gte(appUsage.endedAt, start)
+      )
+    )
     .groupBy(appUsage.bundleId)
     .orderBy(desc(clamped))
     .all()
