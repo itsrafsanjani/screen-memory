@@ -60,6 +60,7 @@ export class AppStateService {
   private cachedState: AppState | null = null
   private cachedStateAt = 0
   private inFlightState: Promise<AppState | null> | null = null
+  private inFlightStartedAt = 0
 
   constructor() {
     this.binaryPath = this.resolveBinaryPath()
@@ -132,9 +133,15 @@ export class AppStateService {
     if (this.cachedState && now - this.cachedStateAt < maxAgeMs) {
       return this.cachedState
     }
-    if (this.inFlightState) return this.inFlightState
+    // Sharing a request already in flight is the same staleness as sharing the
+    // cache, so it has to answer to the same age limit: a caller passing 0 would
+    // otherwise be handed a round-trip that started before whatever it is trying
+    // to observe.
+    if (this.inFlightState && this.inFlightStartedAt >= now - maxAgeMs) {
+      return this.inFlightState
+    }
 
-    this.inFlightState = this.request('state')
+    const pending: Promise<AppState | null> = this.request('state')
       .then((raw) => {
         const parsed = stateSchema.safeParse(raw)
         if (!parsed.success) return null
@@ -144,10 +151,15 @@ export class AppStateService {
       })
       .catch(() => null)
       .finally(() => {
-        this.inFlightState = null
+        // Only if it is still the current one: a fresher request may have
+        // replaced it, and clearing that would let the next caller start a
+        // third.
+        if (this.inFlightState === pending) this.inFlightState = null
       })
 
-    return this.inFlightState
+    this.inFlightState = pending
+    this.inFlightStartedAt = now
+    return pending
   }
 
   async listRunningApps(): Promise<RunningApp[]> {
