@@ -3,7 +3,18 @@ export const IPC = {
     getByDate: 'screenshots:get-by-date',
     getAvailableDates: 'screenshots:get-available-dates',
     getDayBounds: 'screenshots:get-day-bounds',
-    getByTimeRange: 'screenshots:get-by-time-range'
+    getByTimeRange: 'screenshots:get-by-time-range',
+    copyToClipboard: 'screenshots:copy-to-clipboard',
+    saveAs: 'screenshots:save-as',
+    revealInFinder: 'screenshots:reveal-in-finder'
+  },
+  usage: {
+    getByDate: 'usage:get-by-date'
+  },
+  apps: {
+    getRunning: 'apps:get-running',
+    pickApplication: 'apps:pick-application',
+    isAvailable: 'apps:is-available'
   },
   capture: {
     start: 'capture:start',

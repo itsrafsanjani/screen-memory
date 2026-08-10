@@ -20,7 +20,7 @@
     "build:win": "npm run build && electron-builder --win",
     "build:mac": "electron-vite build && electron-builder --mac",
     "build:linux": "electron-vite build && electron-builder --linux",
-    "build:ocr": "cd swift-ocr && swift build -c release",
+    "build:swift": "cd swift-ocr && swift build -c release",
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio"
   },

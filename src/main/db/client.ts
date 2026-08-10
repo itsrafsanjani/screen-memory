@@ -24,6 +24,14 @@ export function getStagingPath(): string {
   return join(getDbDir(), 'screenmemory.new.db')
 }
 
+/**
+ * Where the original database is parked during the swap. Its presence with no
+ * live database is what tells the next launch that a swap was interrupted.
+ */
+export function getPreSwapPath(): string {
+  return join(getDbDir(), 'screenmemory.pre-migration.db')
+}
+
 let dbInstance: Db | null = null
 let sqliteInstance: Database.Database | null = null
 

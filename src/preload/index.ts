@@ -1,5 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { ScreenshotRecord, DayBounds, GitCommit, GitRepo, OcrSearchResult } from '../types'
+import type {
+  ScreenshotRecord,
+  DayBounds,
+  GitCommit,
+  GitRepo,
+  OcrSearchResult,
+  AppUsageSegment,
+  RunningApp
+} from '../types'
 import { IPC } from '../shared/ipc-channels'
 import { unwrap, type Result } from '../shared/result'
 import type { MigrationProgress } from '../main/db/migration-runner'
@@ -22,6 +30,31 @@ const api = {
   },
   getScreenshotsByTimeRange(start: number, end: number): Promise<ScreenshotRecord[]> {
     return invoke(IPC.screenshots.getByTimeRange, start, end)
+  },
+  copyScreenshotToClipboard(filePath: string): Promise<void> {
+    return invoke(IPC.screenshots.copyToClipboard, filePath)
+  },
+  saveScreenshotAs(filePath: string): Promise<string | null> {
+    return invoke(IPC.screenshots.saveAs, filePath)
+  },
+  revealScreenshotInFinder(filePath: string): Promise<void> {
+    return invoke(IPC.screenshots.revealInFinder, filePath)
+  },
+
+  // App usage
+  getAppUsage(date: string): Promise<AppUsageSegment[]> {
+    return invoke(IPC.usage.getByDate, date)
+  },
+
+  // Applications
+  isAppStateAvailable(): Promise<boolean> {
+    return invoke(IPC.apps.isAvailable)
+  },
+  getRunningApps(): Promise<RunningApp[]> {
+    return invoke(IPC.apps.getRunning)
+  },
+  pickApplication(): Promise<RunningApp | null> {
+    return invoke(IPC.apps.pickApplication)
   },
 
   // Capture

@@ -2,12 +2,10 @@
 import PackageDescription
 
 let package = Package(
-    name: "screen-memory-ocr",
+    name: "screen-memory-helpers",
     platforms: [.macOS(.v13)],
     targets: [
-        .executableTarget(
-            name: "screen-memory-ocr",
-            path: "Sources"
-        )
+        .executableTarget(name: "screen-memory-ocr"),
+        .executableTarget(name: "screen-memory-appstate")
     ]
 )
