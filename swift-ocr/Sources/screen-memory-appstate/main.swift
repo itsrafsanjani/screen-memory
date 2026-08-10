@@ -89,53 +89,44 @@ func overlapArea(_ a: CGRect, _ b: CGRect) -> CGFloat {
     return overlap.width * overlap.height
 }
 
-/// The display a window predominantly occupies, or nil if it touches none.
+/// The share of a display a window has to occupy before it can be called that
+/// display's frontmost window.
 ///
-/// Any intersection at all used to be enough to call a window a display's
-/// frontmost one. A window spilling a few pixels onto the neighbouring screen
-/// would therefore be reported as *that* screen's dominant app and mask the app
-/// actually filling it — silently disabling exclusion on a monitor. Assigning
-/// each window to a single home display makes the spill-over case fall through
-/// to the window that really is in front there.
-func homeDisplay(for rect: CGRect, among displays: [(id: CGDirectDisplayID, rect: CGRect)])
-    -> CGDirectDisplayID?
-{
-    var best: (id: CGDirectDisplayID, area: CGFloat)?
-    for display in displays {
-        let area = overlapArea(rect, display.rect)
-        guard area > 0 else { continue }
-        if best == nil || area > best!.area { best = (display.id, area) }
-    }
-    return best?.id
-}
+/// Any intersection at all used to be enough, so a window spilling a few pixels
+/// onto the neighbouring screen was reported as *that* screen's dominant app and
+/// masked the app actually filling it — silently disabling exclusion on a
+/// monitor. A floor rather than assigning each window to the one display it
+/// mostly occupies: a window can legitimately fill two displays at once, and
+/// picking a single winner would leave the other reporting no app at all, which
+/// reads downstream as "nothing to exclude here".
+let minDisplayShare = 0.02
 
 func statePayload() -> [String: Any] {
     let windows = onScreenWindows()
-    let activeList = activeDisplays().map { (id: $0, rect: CGDisplayBounds($0)) }
-    // Computed once for all displays: with N displays and M windows this is the
-    // difference between N*M and M passes.
-    let homes = windows.map { homeDisplay(for: $0.rect, among: activeList) }
 
     var displays: [[String: Any]] = []
 
-    for display in activeList {
-        let displayArea = display.rect.width * display.rect.height
+    for id in activeDisplays() {
+        let bounds = CGDisplayBounds(id)
+        let displayArea = Double(bounds.width * bounds.height)
         guard displayArea > 0 else { continue }
 
-        var entry: [String: Any] = ["displayId": String(display.id)]
+        var entry: [String: Any] = ["displayId": String(id)]
 
-        // Only the frontmost window whose home is this display is considered. If
-        // its owner can't be identified we report the display with no dominant
-        // app rather than falling through to the window behind it — reporting a
-        // covered-up app as dominant would exclude a screen the user can see.
-        if let front = windows.indices.first(where: { homes[$0] == display.id }),
-           let info = appInfo(for: windows[front].pid) {
-            let area = overlapArea(windows[front].rect, display.rect)
-            let coverage = min(max(Double(area / displayArea), 0), 1)
+        // Front-to-back, so the first window meaningfully present here is the
+        // one in front here. If its owner can't be identified we report the
+        // display with no dominant app rather than falling through to the window
+        // behind it — reporting a covered-up app as dominant would exclude a
+        // screen the user can see.
+        for window in windows {
+            let share = Double(overlapArea(window.rect, bounds)) / displayArea
+            guard share >= minDisplayShare else { continue }
+            guard let info = appInfo(for: window.pid) else { break }
             entry["bundleId"] = info.bundleId
             entry["name"] = info.name
-            entry["coverage"] = coverage
-            entry["isFullscreen"] = coverage >= fullscreenCoverage
+            entry["coverage"] = min(share, 1)
+            entry["isFullscreen"] = share >= fullscreenCoverage
+            break
         }
 
         displays.append(entry)
