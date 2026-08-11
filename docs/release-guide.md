@@ -272,6 +272,35 @@ Check a build by watching a long-lived helper across a real app switch:
 Switch apps while it runs; it fails if the reported app never changes. The same freeze also empties
 the app-exclusion picker of anything launched after startup.
 
+### Screen Recording Permission Is Lost on Every Update
+
+Users have to re-grant Screen Recording after installing a new version, and capture stays broken
+until they do.
+
+macOS keys that permission to the app's **designated requirement**, not its bundle identifier. These
+builds are ad-hoc signed, which makes the requirement a bare content hash:
+
+```bash
+$ codesign -d -r- "/Applications/Screen Memory.app"
+# designated => cdhash H"e1fa482df20f9665b8465bf5c22031abe836a22a"
+```
+
+That hash changes with every build, so each release is a different app as far as TCC is concerned and
+the old grant no longer applies. Nothing in the app can carry the permission across — it is a
+property of how the bundle is signed.
+
+The fix is a **Developer ID certificate** (a paid Apple Developer account). Signing with one makes the
+designated requirement name the team rather than the bytes:
+
+```
+identifier "com.screenmemory.app" and anchor apple generic and
+  certificate leaf[subject.OU] = "<TEAMID>"
+```
+
+That is stable across builds, so the grant survives updates. It also removes the Gatekeeper
+right-click dance once the build is notarized. Until then, every release note must tell users to
+re-grant the permission, and the checklist item below covers it.
+
 ## Release Checklist
 
 - [ ] All tests passing
@@ -283,6 +312,7 @@ the app-exclusion picker of anything launched after startup.
 - [ ] Release published (not draft)
 - [ ] DMG, ZIP, both blockmaps and `latest-mac.yml` uploaded
 - [ ] Release notes include the Gatekeeper workaround
+- [ ] Release notes tell users to re-grant Screen Recording (ad-hoc signing loses it every update)
 - [ ] DMG downloaded from the release page, mounted, and launched on real hardware
 - [ ] Homebrew cask updated with new version and SHA256
 - [ ] Installation tested via Homebrew
