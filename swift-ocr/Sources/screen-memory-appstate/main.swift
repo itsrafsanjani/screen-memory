@@ -22,6 +22,55 @@ let fullscreenCoverage = 0.995
 
 let ownPid = ProcessInfo.processInfo.processIdentifier
 
+/// Tracks the active application across the life of the process.
+///
+/// `NSWorkspace.shared.frontmostApplication` reads a snapshot AppKit refreshes
+/// from workspace notifications delivered on the run loop. This helper used to
+/// block its only thread in `readLine()`, so nothing was ever delivered and the
+/// property stayed pinned to whatever was in front when the helper spawned —
+/// which is Screen Memory itself, since it shows a window just before starting
+/// the helper. Every usage poll then saw the app's own window and recorded
+/// nothing at all.
+///
+/// The notification is read directly rather than by re-reading the property, so
+/// this stays correct without depending on when AppKit refreshes its cache. It
+/// only works because the process now runs a run loop; see the bottom of the
+/// file.
+final class FrontmostTracker {
+    private var current: NSRunningApplication?
+
+    init() {
+        // A one-shot invocation answers and exits before any notification could
+        // arrive, so the seed is the only value it ever has — and in a fresh
+        // process the property is accurate.
+        current = NSWorkspace.shared.frontmostApplication
+
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            guard
+                let app = note.userInfo?[NSWorkspace.applicationUserInfoKey]
+                    as? NSRunningApplication
+            else { return }
+            self?.current = app
+        }
+    }
+
+    /// Nil once the tracked app has quit and nothing else has taken focus yet.
+    /// Reporting a dead app would credit its usage segment with time the user
+    /// spent elsewhere.
+    func active() -> NSRunningApplication? {
+        guard let app = current, !app.isTerminated else { return nil }
+        return app
+    }
+}
+
+/// Initialized here, before anything can call `frontmostPayload()`: top-level
+/// statements in main.swift run in source order.
+let frontmost = FrontmostTracker()
+
 struct AppInfo {
     let bundleId: String
     let name: String
@@ -74,7 +123,7 @@ func activeDisplays() -> [CGDirectDisplayID] {
 }
 
 func frontmostPayload() -> [String: Any]? {
-    guard let front = NSWorkspace.shared.frontmostApplication,
+    guard let front = frontmost.active(),
           let bundleId = front.bundleIdentifier else { return nil }
     return [
         "bundleId": bundleId,
@@ -196,13 +245,44 @@ func handle(_ line: String) {
 }
 
 // One-shot mode (`screen-memory-appstate state`) purely for debugging by hand;
-// the app always drives the stdin loop below.
+// the app always drives the stdin loop below. Answers from the seeded tracker
+// and exits without ever entering the run loop.
 let argv = Array(CommandLine.arguments.dropFirst())
 if !argv.isEmpty {
     handle(argv.joined(separator: " "))
     exit(0)
 }
 
-while let line = readLine(strippingNewline: true) {
-    handle(line)
+// stdin is read on its own thread so the main thread can run its run loop. That
+// run loop is what delivers the workspace notifications FrontmostTracker needs;
+// blocking the main thread here is what made this helper report a frozen
+// frontmost app for its entire life.
+//
+// Commands are handled back on main: it serializes them against the notification
+// observer, which touches the same state, and keeps replies in request order —
+// the parent matches each reply to the request it has in flight, so reordering
+// would mismatch them.
+let stdinReader = Thread {
+    while let line = readLine(strippingNewline: true) {
+        DispatchQueue.main.sync { handle(line) }
+    }
+    // The parent closed the pipe. Nothing more can arrive, and the run loop
+    // would otherwise keep this process alive forever.
+    exit(0)
 }
+stdinReader.start()
+
+// CFRunLoopRun() returns as soon as its run loop has no input sources left, and
+// returning here would run off the end of main.swift and exit — the helper would
+// die the instant it started, and the parent would respawn it forever. The
+// workspace observer installs a source, but nothing in this file guarantees that,
+// so an idle timer anchors the run loop explicitly.
+//
+// If it returns anyway the process exits, which the parent sees and recovers from
+// with its respawn backoff. Deliberately not a `while true` retry: that would
+// spin the CPU at 100% forever on a run loop that has nothing to service, which
+// is a far quieter failure than exiting.
+let keepAlive = Timer(timeInterval: 3600, repeats: true) { _ in }
+RunLoop.main.add(keepAlive, forMode: .default)
+
+CFRunLoopRun()
