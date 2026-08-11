@@ -52,19 +52,38 @@ export function ExcludedApps({ getSetting, updateSetting }: Props): React.JSX.El
 
   useEffect(() => {
     let cancelled = false
-    window.electronAPI
-      .isAppStateAvailable()
-      .then((isAvailable) => {
-        if (cancelled) return
-        setAvailable(isAvailable)
-        if (!isAvailable) return
-        return window.electronAPI.getRunningApps().then((apps) => {
-          if (!cancelled) setRunningApps(apps)
+    // Alt-tabbing can fire focus twice in quick succession, and the two requests
+    // are not guaranteed to land in order.
+    let issued = 0
+    let applied = 0
+
+    const load = (): void => {
+      const seq = ++issued
+      window.electronAPI
+        .isAppStateAvailable()
+        .then((isAvailable) => {
+          if (cancelled || seq < applied) return
+          applied = seq
+          setAvailable(isAvailable)
+          if (!isAvailable) return
+          return window.electronAPI.getRunningApps().then((apps) => {
+            if (!cancelled && seq >= applied) setRunningApps(apps)
+          })
         })
-      })
-      .catch(console.error)
+        .catch(console.error)
+    }
+
+    load()
+
+    // The list changes when the user starts or quits an app, which they do
+    // outside this window — so returning to it is exactly when it can be stale.
+    // Read once and the picker shows whatever was running when Settings opened,
+    // and closing and reopening Settings is the only way to see anything since.
+    window.addEventListener('focus', load)
+
     return () => {
       cancelled = true
+      window.removeEventListener('focus', load)
     }
   }, [])
 
