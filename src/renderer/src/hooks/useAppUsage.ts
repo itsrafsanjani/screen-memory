@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { USAGE_REFRESH_INTERVAL_MS } from '@shared/constants'
 import type { AppUsageSegment } from '../../../types'
 import { isToday } from '../lib/time-utils'
@@ -27,6 +27,10 @@ interface LoadedDay {
  */
 export function useAppUsage(date: string): AppUsageState {
   const [loaded, setLoaded] = useState<LoadedDay | null>(null)
+  // The date currently on screen. Read from a callback rather than from `loaded`
+  // so the effect below does not have to re-run — and therefore re-subscribe —
+  // every time a refresh lands.
+  const shown = useRef<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -42,25 +46,26 @@ export function useAppUsage(date: string): AppUsageState {
         .then(([rows, isAvailable]) => {
           if (cancelled || seq < applied) return
           applied = seq
+          shown.current = date
           setLoaded({ date, segments: rows, available: isAvailable, error: null })
         })
         .catch((e) => {
           if (cancelled || seq < applied) return
-          applied = seq
           console.error('Failed to load app usage:', e)
-          setLoaded((prev) => {
-            // A background refresh that fails must not throw away a good view.
-            // Only a first load has nothing better to show than the error.
-            if (prev?.date === date) return prev
-            // A failed read is not an idle day. Reporting it as one would tell
-            // the user their time simply wasn't tracked, which is worse than an
-            // error.
-            return {
-              date,
-              segments: [],
-              available: true,
-              error: e instanceof Error ? e.message : 'Could not load app usage'
-            }
+          // A background refresh that fails must not throw away a good view, and
+          // must not count as applied either: a slower request still in flight
+          // can still supersede it. Claiming the slot here would discard that
+          // response and leave the day stranded until the next interval.
+          if (shown.current === date) return
+          applied = seq
+          shown.current = date
+          // A failed read is not an idle day. Reporting it as one would tell the
+          // user their time simply wasn't tracked, which is worse than an error.
+          setLoaded({
+            date,
+            segments: [],
+            available: true,
+            error: e instanceof Error ? e.message : 'Could not load app usage'
           })
         })
     }
