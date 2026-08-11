@@ -36,6 +36,14 @@ export const DEFAULT_EXCLUSION_COVERAGE_PERCENT = 80
 // App usage tracking
 export const USAGE_POLL_INTERVAL_MS = 2_000
 
+/**
+ * How often the Usage view re-reads today from the database. The open segment
+ * is grown every `USAGE_POLL_INTERVAL_MS`, so the numbers on screen go stale
+ * immediately without this — the window is hidden and shown rather than
+ * remounted, so nothing else would ever refetch them.
+ */
+export const USAGE_REFRESH_INTERVAL_MS = 15_000
+
 // Retention (days)
 export const DEFAULT_SCREENSHOT_RETENTION_DAYS = 7
 export const DEFAULT_OCR_RETENTION_DAYS = 90

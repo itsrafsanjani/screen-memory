@@ -252,11 +252,32 @@ cat "/Applications/Screen Memory.app/Contents/Resources/app-update.yml"
 The `owner`/`repo` must name the repository the release was published to — a fork's build must point
 at the fork, not at upstream.
 
+### App Usage Not Being Recorded
+
+The Usage view is empty, or shows a single app that never changes.
+
+The helper reports the frontmost app from `NSWorkspace`, which AppKit refreshes from notifications
+delivered on the **run loop**. A helper that blocks its thread instead of running one reports
+whichever app was in front when it spawned, for its entire life — usually Screen Memory itself,
+which `UsageService` skips, so nothing is recorded at all. Nothing static catches this: the binary
+builds, spawns, and answers every request, and a one-shot invocation always answers correctly
+because the process is fresh.
+
+Check a build by watching a long-lived helper across a real app switch:
+
+```bash
+./scripts/check-appstate-liveness.sh swift-ocr/.build/release/screen-memory-appstate
+```
+
+Switch apps while it runs; it fails if the reported app never changes. The same freeze also empties
+the app-exclusion picker of anything launched after startup.
+
 ## Release Checklist
 
 - [ ] All tests passing
 - [ ] Version bumped in `package.json`
 - [ ] CI green on the exact commit being tagged
+- [ ] `./scripts/check-appstate-liveness.sh` passes (needs a human to switch apps; CI cannot run it)
 - [ ] Git tag matches the `package.json` version, created and pushed by name (`vX.X.X`)
 - [ ] GitHub Actions workflow completed successfully
 - [ ] Release published (not draft)

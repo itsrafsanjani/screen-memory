@@ -19,27 +19,28 @@ export function formatTimeShort(timestampMs: number): string {
   return `${h12}:${m} ${ampm}`
 }
 
+/** Whether a `YYYY-MM-DD` string names the same local day as `other`. */
+function isSameDay(dateStr: string, other: Date): boolean {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return other.getFullYear() === y && other.getMonth() === m - 1 && other.getDate() === d
+}
+
+/**
+ * Whether `dateStr` is today, in local time. Callers use it to decide whether a
+ * day can still change: every earlier day is finished and never needs re-reading.
+ */
+export function isToday(dateStr: string): boolean {
+  return isSameDay(dateStr, new Date())
+}
+
 export function formatDateDisplay(dateStr: string): string {
   const [y, m, d] = dateStr.split('-').map(Number)
   const date = new Date(y, m - 1, d)
-  const today = new Date()
   const yesterday = new Date()
   yesterday.setDate(yesterday.getDate() - 1)
 
-  if (
-    date.getFullYear() === today.getFullYear() &&
-    date.getMonth() === today.getMonth() &&
-    date.getDate() === today.getDate()
-  ) {
-    return 'Today'
-  }
-  if (
-    date.getFullYear() === yesterday.getFullYear() &&
-    date.getMonth() === yesterday.getMonth() &&
-    date.getDate() === yesterday.getDate()
-  ) {
-    return 'Yesterday'
-  }
+  if (isToday(dateStr)) return 'Today'
+  if (isSameDay(dateStr, yesterday)) return 'Yesterday'
   return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
