@@ -35,6 +35,9 @@ export class CaptureService {
   /** Display ids currently being skipped, so the log fires on transitions only. */
   private skippedDisplayIds = new Set<string>()
   private warnedDisplayIdMismatch = false
+  // Latched so a helper that stays down logs once rather than every cycle, and
+  // logs again if it recovers and fails a second time.
+  private exclusionBlind = false
 
   constructor(storage: StorageService, appState: AppStateService) {
     this.storage = storage
@@ -118,6 +121,10 @@ export class CaptureService {
       // because it has since been dismissed. Both reads have to agree that the
       // display is clear.
       const before = await this.getFrontWindows(displays.map((d) => d.id.toString()))
+      if (before === null) {
+        this.skipBlindCapture()
+        return
+      }
 
       const sources = await desktopCapturer.getSources({
         types: ['screen'],
@@ -136,6 +143,11 @@ export class CaptureService {
         // memo the first one just filled.
         0
       )
+      if (after === null) {
+        this.skipBlindCapture()
+        return
+      }
+      this.exclusionBlind = false
 
       for (const { source, displayId } of targets) {
         if (this.shouldSkipDisplay(displayId, [before.get(displayId), after.get(displayId)])) {
@@ -181,15 +193,19 @@ export class CaptureService {
    * The frontmost window on each display, keyed by the display id used by
    * `desktopCapturer`. Empty when nothing is excluded, so the common case never
    * pays for a helper round-trip.
+   *
+   * `null` means the question could not be answered while exclusions are
+   * configured — distinct from an empty map, which means nothing is excluded.
+   * Collapsing the two is what let a timed-out helper look like a clear screen.
    */
   private async getFrontWindows(
     displayIds: string[],
     maxAgeMs?: number
-  ): Promise<Map<string, DisplayWindow>> {
+  ): Promise<Map<string, DisplayWindow> | null> {
     if (this.excludedBundleIds.size === 0) return new Map()
 
     const state = await this.appState.getState(maxAgeMs)
-    if (!state || state.displays.length === 0) return new Map()
+    if (!state || state.displays.length === 0) return null
 
     const byId = new Map(state.displays.map((d) => [d.displayId, d]))
     if (displayIds.some((id) => byId.has(id))) return byId
@@ -209,7 +225,22 @@ export class CaptureService {
     if (displayIds.length === 1 && state.displays.length === 1) {
       return new Map([[displayIds[0], state.displays[0]]])
     }
-    return new Map()
+    return null
+  }
+
+  /**
+   * Once an app is excluded, knowing what is in front is a precondition for
+   * capturing at all, so an unanswerable read has to skip the cycle. A gap in
+   * the archive is recoverable; a full-resolution JPEG of the app the user
+   * asked never to record — written to disk and handed to OCR — is not.
+   */
+  private skipBlindCapture(): void {
+    if (this.exclusionBlind) return
+    this.exclusionBlind = true
+    console.warn(
+      'Skipping capture: the app state helper did not report the frontmost window, ' +
+        'so an excluded app cannot be ruled out.'
+    )
   }
 
   private isExcluded(front: DisplayWindow | undefined): boolean {

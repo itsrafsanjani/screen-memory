@@ -310,10 +310,20 @@ export async function migrateLegacyDatabase(emit: Emit, migrationsFolder: string
   // 2. Apply Drizzle migrations against a fresh staging DB
   emit({ phase: 'migrate-schema', message: 'Preparing new database…' })
   const freshSqlite = new Database(stagingPath)
-  freshSqlite.pragma('journal_mode = WAL')
-  freshSqlite.pragma('synchronous = NORMAL')
-  const freshDrizzle = drizzle(freshSqlite, { schema })
-  migrate(freshDrizzle, { migrationsFolder })
+  try {
+    freshSqlite.pragma('journal_mode = WAL')
+    freshSqlite.pragma('synchronous = NORMAL')
+    migrate(drizzle(freshSqlite, { schema }), { migrationsFolder })
+  } catch (err) {
+    // migrate() throws when the packaged migrations folder is missing, which is
+    // a packaging regression rather than a user's doing. The swap has not begun
+    // so the live database is intact either way, but without this the handle
+    // stays open for the life of the process and the staging files are left for
+    // the next attempt to trip over.
+    freshSqlite.close()
+    removeDbFiles(stagingPath)
+    throw err
+  }
 
   // 3. Open legacy read-write so we can patch the OCR schema if needed
   const legacySqlite = new Database(backupPath)

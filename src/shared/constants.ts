@@ -7,6 +7,12 @@
 export const DEFAULT_ACTIVE_INTERVAL_MS = 5_000
 export const DEFAULT_IDLE_INTERVAL_MS = 30_000
 export const DEFAULT_JPEG_QUALITY = 65
+/**
+ * Floor for either capture interval. A screenshot costs a full-screen grab, a
+ * JPEG encode, a disk write and an OCR job, so anything near zero is a runaway
+ * rather than a fast setting.
+ */
+export const MIN_CAPTURE_INTERVAL_MS = 250
 
 // Idle detection (seconds of system inactivity before treating user as idle)
 export const IDLE_THRESHOLD_SECONDS = 120

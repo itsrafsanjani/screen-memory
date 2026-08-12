@@ -238,6 +238,12 @@ export class AppStateService {
       pending?.reject(new Error(`App state helper timed out on "${pending.command}"`))
       this.killChild()
       this.scheduleRespawn()
+      // Every other failure path drains the queue through failPending(); this
+      // one used to leave it sitting until the respawn fired. Capture awaits its
+      // second read before it can schedule the next cycle, so against a wedged
+      // helper that stall is the whole backoff — up to 30s of no screenshots at
+      // all. pump() sees the respawn timer and rejects them now instead.
+      this.pump()
     }, APP_STATE_REQUEST_TIMEOUT_MS)
 
     stdin.write(`${next.command}\n`, (err) => {

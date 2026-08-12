@@ -19,10 +19,6 @@ interface Props {
 
 const DEFAULT_THRESHOLD = '80'
 
-function isValidThreshold(value: number): boolean {
-  return Number.isFinite(value) && value >= 1 && value <= 100
-}
-
 function parseExcluded(raw: string): ExcludedApp[] {
   try {
     const parsed: unknown = JSON.parse(raw)
@@ -196,15 +192,15 @@ export function ExcludedApps({ getSetting, updateSetting }: Props): React.JSX.El
           // `min`/`max` only colour the field; nothing stops a typed 0 or 500
           // from being saved and applied, so the value is clamped here too.
           value={threshold ?? savedThreshold}
-          onChange={(e) => {
-            setThreshold(e.target.value)
-            const parsed = Number(e.target.value)
-            // While the field is mid-edit ("" on the way to 90, or 1 on the way
-            // to 100) there is nothing meaningful to save yet; blur commits it.
-            if (isValidThreshold(parsed)) {
-              void updateSetting('capture.exclusionCoverageThreshold', String(Math.round(parsed)))
-            }
-          }}
+          // While the field is mid-edit ("" on the way to 90, or 1 on the way to
+          // 100) there is nothing meaningful to save yet; blur commits it.
+          // Saving per keystroke also could not be undone by the next one: the
+          // invalid states never call updateSetting, so an emptied field leaves
+          // the last valid prefix as the newest pending write and the debounce
+          // in useSettings flushes it — backspacing 90 down to nothing used to
+          // save 9, dropping the threshold far enough that an excluded app
+          // showing a sliver blanks a whole display out of the archive.
+          onChange={(e) => setThreshold(e.target.value)}
           onBlur={() => {
             const draft = threshold
             setThreshold(null)

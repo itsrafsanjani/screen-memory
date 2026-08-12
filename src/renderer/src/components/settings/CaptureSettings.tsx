@@ -17,6 +17,7 @@ export function CaptureSettings({ getSetting, updateSetting }: Props): React.JSX
         <Label>Active Interval (ms)</Label>
         <Input
           type="number"
+          min="250"
           value={getSetting('capture.activeIntervalMs', '5000')}
           onChange={(e) => updateSetting('capture.activeIntervalMs', e.target.value)}
           className="w-32"
@@ -30,6 +31,7 @@ export function CaptureSettings({ getSetting, updateSetting }: Props): React.JSX
         <Label>Idle Interval (ms)</Label>
         <Input
           type="number"
+          min="250"
           value={getSetting('capture.idleIntervalMs', '30000')}
           onChange={(e) => updateSetting('capture.idleIntervalMs', e.target.value)}
           className="w-32"

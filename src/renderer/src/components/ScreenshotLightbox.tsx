@@ -169,7 +169,14 @@ export function ScreenshotLightbox({
             </div>
 
             <div className="ml-auto flex items-center gap-1">
-              {status ? <span className="mr-2 text-xs text-muted-foreground">{status}</span> : null}
+              {/* Always mounted: a live region only announces changes that happen
+                  while it is already in the DOM, so mounting it along with the
+                  text would announce nothing. This is the only feedback channel
+                  for copy/save/reveal — including their failures — and it clears
+                  itself after two seconds. */}
+              <span role="status" aria-live="polite" className="mr-2 text-xs text-muted-foreground">
+                {status ?? ''}
+              </span>
 
               <Button
                 variant="ghost"

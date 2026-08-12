@@ -105,7 +105,13 @@ export class UsageService {
         return
       }
 
-      this.closeSegment()
+      // Closing at `now` would write the one segment the comment above promises
+      // cannot exist: the tick that trips the rollover always arrives a little
+      // past the bound, so the final span lands just over MAX_SEGMENT_SPAN_MS —
+      // exactly the width the day queries cannot find.
+      this.closeSegment(
+        this.current ? Math.min(now, this.current.startedAt + MAX_SEGMENT_SPAN_MS) : now
+      )
       this.current = {
         id: openSegment({
           bundleId: frontmost.bundleId,

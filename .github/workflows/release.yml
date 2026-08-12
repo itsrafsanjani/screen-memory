@@ -19,27 +19,21 @@ on:
 permissions:
   contents: write
 
-# Two releases writing assets to the same tag would race. Never cancel a run in
-# flight — a half-uploaded release is worse than a queued one.
-concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
-  build:
-    runs-on: macos-14
+  # Split out purely so the build job can key its concurrency group on the
+  # resolved tag. `github.ref` cannot serve as that key: a tag push and a
+  # workflow_dispatch from main can target the same version under different
+  # refs, land in different groups, run together, and interleave their uploads
+  # to one release — leaving a latest-mac.yml whose sha512 belongs to the other
+  # run's DMG, which breaks auto-update for everyone until a human notices.
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
 
       # electron-builder names the release after the package.json version, not
       # the git ref, so pushing v0.2.0 without bumping package.json would quietly
@@ -63,7 +57,6 @@ jobs:
             VERSION="$PKG_VERSION"
           elif [ -n "$INPUT_VERSION" ]; then
             VERSION="${INPUT_VERSION#v}"
-            npm pkg set version="$VERSION"
           else
             VERSION="$PKG_VERSION"
           fi
@@ -72,13 +65,44 @@ jobs:
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
           echo "Releasing v$VERSION"
 
+  build:
+    needs: resolve
+    runs-on: macos-14
+    # Two releases writing assets to the same tag would race. Never cancel a run
+    # in flight — a half-uploaded release is worse than a queued one. The
+    # tag-free check below sits inside this gate on purpose, so a run that
+    # queues behind a successful one fails instead of overwriting it.
+    concurrency:
+      group: release-${{ needs.resolve.outputs.tag }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      # The resolver runs on a different machine, so its workspace is gone.
+      # Writing the resolved version back is a no-op except on a dispatch that
+      # overrode it, which is exactly the case electron-builder needs it for.
+      - name: Pin the package version
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: npm pkg set version="$VERSION"
+
       # electron-builder refuses to touch a published release older than two
       # hours and still exits 0, so without this guard a rerun looks green while
       # uploading nothing. Anything else would overwrite a live release's assets.
       - name: Ensure the release tag is free
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ steps.version.outputs.tag }}
+          TAG: ${{ needs.resolve.outputs.tag }}
         run: |
           set -euo pipefail
           if ! STATE="$(gh release view "$TAG" --json isDraft --jq '.isDraft' 2>/dev/null)"; then
@@ -139,7 +163,7 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: screen-memory-${{ steps.version.outputs.tag }}
+          name: screen-memory-${{ needs.resolve.outputs.tag }}
           path: |
             dist/*.dmg
             dist/*.zip
