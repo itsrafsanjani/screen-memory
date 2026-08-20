@@ -1,5 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react'
 import type { DayBounds, GitCommit, ScreenshotRecord } from '../../../types'
+import type { DisplayOption } from '../hooks/useDisplayFilter'
 import { ScreenshotViewer } from './ScreenshotViewer'
 import { Timeline } from './Timeline'
 import { DetailSidebar } from './DetailSidebar'
@@ -7,6 +8,7 @@ import { DetailSidebar } from './DetailSidebar'
 interface Props {
   loading: boolean
   screenshots: ScreenshotRecord[]
+  displays: DisplayOption[]
   screenshotsWithCommits: ScreenshotRecord[]
   gitCommits: GitCommit[]
   dayBounds: DayBounds | null
@@ -14,18 +16,21 @@ interface Props {
   hoverTimestamp: number | null
   setHoverTimestamp: Dispatch<SetStateAction<number | null>>
   onSeek: (timestamp: number) => void
+  onLightboxOpenChange: (open: boolean) => void
 }
 
 export function TimelineView({
   loading,
   screenshots,
+  displays,
   screenshotsWithCommits,
   gitCommits,
   dayBounds,
   currentTimestamp,
   hoverTimestamp,
   setHoverTimestamp,
-  onSeek
+  onSeek,
+  onLightboxOpenChange
 }: Props): React.JSX.Element {
   return (
     <>
@@ -37,8 +42,10 @@ export function TimelineView({
         <div className="flex-1 flex min-h-0">
           <ScreenshotViewer
             screenshots={screenshots}
+            displays={displays}
             currentTimestamp={currentTimestamp}
             hoverTimestamp={hoverTimestamp}
+            onLightboxOpenChange={onLightboxOpenChange}
           />
           <DetailSidebar
             commits={gitCommits}

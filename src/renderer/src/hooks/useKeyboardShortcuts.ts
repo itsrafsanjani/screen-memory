@@ -18,15 +18,20 @@ const KEY_TO_ACTION: Record<string, keyof ShortcutActions> = {
 
 const IGNORED_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT'])
 
-export function useKeyboardShortcuts(actions: ShortcutActions): void {
+export function useKeyboardShortcuts(actions: ShortcutActions, disabled = false): void {
   const actionsRef = useRef(actions)
+  const disabledRef = useRef(disabled)
 
   useEffect(() => {
     actionsRef.current = actions
+    disabledRef.current = disabled
   })
 
   useEffect(() => {
     const handler = (e: KeyboardEvent): void => {
+      // Something modal (the lightbox) owns these keys right now.
+      if (disabledRef.current) return
+
       const tag = (e.target as HTMLElement | null)?.tagName
       if (tag && IGNORED_TAGS.has(tag)) return
 

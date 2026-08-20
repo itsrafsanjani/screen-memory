@@ -12,6 +12,8 @@ files:
 extraResources:
   - from: swift-ocr/.build/release/screen-memory-ocr
     to: bin/screen-memory-ocr
+  - from: swift-ocr/.build/release/screen-memory-appstate
+    to: bin/screen-memory-appstate
   - from: resources/iconTemplate.png
     to: iconTemplate.png
   - from: resources/iconTemplate@2x.png
@@ -26,7 +28,8 @@ asarUnpack:
   - resources/**
   - node_modules/better-sqlite3/**
 mac:
-  entitlementsInherit: build/entitlements.mac.plist
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.inherit.plist
   extendInfo:
     NSScreenCaptureUsageDescription: Screen Memory needs screen recording access to capture screenshots of your desktop.
   notarize: false

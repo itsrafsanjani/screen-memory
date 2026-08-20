@@ -1,5 +1,8 @@
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Separator } from '@/components/ui/separator'
+import { ExcludedApps } from './ExcludedApps'
+import { MAX_CAPTURE_INTERVAL_MS, MIN_CAPTURE_INTERVAL_MS } from '@shared/constants'
 
 interface Props {
   getSetting: (key: string, defaultValue?: string) => string
@@ -15,6 +18,8 @@ export function CaptureSettings({ getSetting, updateSetting }: Props): React.JSX
         <Label>Active Interval (ms)</Label>
         <Input
           type="number"
+          min={MIN_CAPTURE_INTERVAL_MS}
+          max={MAX_CAPTURE_INTERVAL_MS}
           value={getSetting('capture.activeIntervalMs', '5000')}
           onChange={(e) => updateSetting('capture.activeIntervalMs', e.target.value)}
           className="w-32"
@@ -28,6 +33,8 @@ export function CaptureSettings({ getSetting, updateSetting }: Props): React.JSX
         <Label>Idle Interval (ms)</Label>
         <Input
           type="number"
+          min={MIN_CAPTURE_INTERVAL_MS}
+          max={MAX_CAPTURE_INTERVAL_MS}
           value={getSetting('capture.idleIntervalMs', '30000')}
           onChange={(e) => updateSetting('capture.idleIntervalMs', e.target.value)}
           className="w-32"
@@ -49,6 +56,10 @@ export function CaptureSettings({ getSetting, updateSetting }: Props): React.JSX
         />
         <p className="text-xs text-muted-foreground">1-100, lower = smaller files (default: 65)</p>
       </div>
+
+      <Separator />
+
+      <ExcludedApps getSetting={getSetting} updateSetting={updateSetting} />
     </div>
   )
 }

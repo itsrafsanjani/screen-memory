@@ -92,7 +92,12 @@ export function AIProviderSettings({ getSetting, updateSetting }: Props): React.
           <Label>API Key</Label>
           <Input
             type="password"
-            placeholder="Enter API key..."
+            autoComplete="off"
+            placeholder={
+              getSetting('ai.hasApiKey') === '1'
+                ? 'Key saved — enter a new one to replace'
+                : 'Enter API key...'
+            }
             value={getSetting('ai.apiKey')}
             onChange={(e) => updateSetting('ai.apiKey', e.target.value)}
           />
@@ -117,6 +122,10 @@ export function AIProviderSettings({ getSetting, updateSetting }: Props): React.
             value={getSetting('ai.baseUrl')}
             onChange={(e) => updateSetting('ai.baseUrl', e.target.value)}
           />
+          <p className="text-xs text-muted-foreground">
+            Official OpenAI API, localhost, or a private LAN address for Ollama / LM Studio. Public
+            third-party hosts are rejected so the API key cannot be redirected off-box.
+          </p>
         </div>
       ) : null}
 

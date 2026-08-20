@@ -1,5 +1,6 @@
 import { and, asc, eq, gte, lte, sql } from 'drizzle-orm'
 import { getDb } from '../client'
+import { dayStartEnd } from '../day-range'
 import { screenshots } from '../schema'
 
 export interface ScreenshotRow {
@@ -11,14 +12,6 @@ export interface ScreenshotRow {
   height: number | null
   file_size: number | null
   is_idle: number
-}
-
-function dayStartEnd(dateStr: string): { start: number; end: number } {
-  const [year, month, day] = dateStr.split('-').map(Number)
-  return {
-    start: new Date(year, month - 1, day, 0, 0, 0, 0).getTime(),
-    end: new Date(year, month - 1, day, 23, 59, 59, 999).getTime()
-  }
 }
 
 function toRow(r: {

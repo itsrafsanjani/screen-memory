@@ -2,13 +2,108 @@ import Database from 'better-sqlite3'
 import { copyFileSync, existsSync, renameSync, unlinkSync } from 'fs'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
-import { getBackupPath, getDbPath, getStagingPath } from './client'
+import { getBackupPath, getDbPath, getPreSwapPath, getStagingPath } from './client'
 import type { MigrationProgress } from './migration-runner'
 import * as schema from './schema'
 
 type Emit = (progress: MigrationProgress) => void
 
 const COPY_BATCH = 5000
+
+/**
+ * SQLite spreads a WAL-mode database across three files. Every operation here
+ * has to treat them as one unit: copying or deleting the main file alone either
+ * loses the committed pages still sitting in the log, or strands a log that
+ * SQLite will later replay into an unrelated database and corrupt it.
+ */
+const SIDECAR_SUFFIXES = ['-wal', '-shm']
+
+function removeDbFiles(path: string): void {
+  for (const candidate of [path, ...SIDECAR_SUFFIXES.map((suffix) => path + suffix)]) {
+    if (existsSync(candidate)) unlinkSync(candidate)
+  }
+}
+
+/**
+ * Folds the write-ahead log back into the main database file so that a plain
+ * file copy of it is complete. A no-op on databases that aren't in WAL mode.
+ */
+function checkpoint(path: string): void {
+  const sqlite = new Database(path)
+  try {
+    sqlite.pragma('wal_checkpoint(TRUNCATE)')
+  } finally {
+    sqlite.close()
+  }
+}
+
+function countRows(db: Database.Database, table: string): number {
+  return (db.prepare(`SELECT COUNT(*) as c FROM ${table}`).get() as { c: number }).c
+}
+
+/**
+ * Guards against a lossy backup. Comparing the staging database against the
+ * backup can't catch this on its own: if the backup silently dropped rows, both
+ * sides are missing them and the counts agree.
+ */
+function verifyBackup(livePath: string, backupPath: string): void {
+  const live = new Database(livePath, { readonly: true, fileMustExist: true })
+  const backup = new Database(backupPath, { readonly: true, fileMustExist: true })
+  try {
+    for (const table of TABLES) {
+      if (!tableExists(live, table.name)) continue
+      const liveCount = countRows(live, table.name)
+      const backupCount = tableExists(backup, table.name) ? countRows(backup, table.name) : -1
+      if (liveCount !== backupCount) {
+        throw new Error(
+          `Backup verification failed for ${table.name}: original=${liveCount}, backup=${backupCount}`
+        )
+      }
+    }
+  } finally {
+    live.close()
+    backup.close()
+  }
+}
+
+/**
+ * Finishes or unwinds a swap that was cut short by a crash or a force quit.
+ * Without this, a missing live database reads as a fresh install on the next
+ * launch and the user silently starts over with an empty history.
+ */
+export function recoverInterruptedSwap(): void {
+  const livePath = getDbPath()
+  const preSwapPath = getPreSwapPath()
+  const stagingPath = getStagingPath()
+
+  if (existsSync(livePath)) {
+    // The swap got as far as putting the new database in place, so the parked
+    // original is just leftover; the .bak copy remains either way.
+    if (existsSync(preSwapPath)) removeDbFiles(preSwapPath)
+    return
+  }
+
+  if (existsSync(preSwapPath)) {
+    console.warn('Recovering interrupted migration: restoring the original database')
+    renameSync(preSwapPath, livePath)
+    for (const suffix of SIDECAR_SUFFIXES) {
+      const sidecar = preSwapPath + suffix
+      if (existsSync(sidecar)) renameSync(sidecar, livePath + suffix)
+    }
+    return
+  }
+
+  // Nothing parked, but a fully migrated staging database is there: the crash
+  // landed in the window the old unlink-then-rename swap left open.
+  if (existsSync(stagingPath)) {
+    console.warn('Recovering interrupted migration: promoting the migrated database')
+    renameSync(stagingPath, livePath)
+    for (const suffix of SIDECAR_SUFFIXES) {
+      const sidecar = stagingPath + suffix
+      if (existsSync(sidecar)) renameSync(sidecar, livePath + suffix)
+    }
+  }
+}
 
 interface TableSpec {
   name: string
@@ -199,21 +294,36 @@ function verifyCounts(legacy: Database.Database, fresh: Database.Database): void
 export async function migrateLegacyDatabase(emit: Emit, migrationsFolder: string): Promise<void> {
   const livePath = getDbPath()
   const stagingPath = getStagingPath()
+  const preSwapPath = getPreSwapPath()
   const backupPath = getBackupPath()
 
-  if (existsSync(stagingPath)) unlinkSync(stagingPath)
+  removeDbFiles(stagingPath)
 
-  // 1. Backup
+  // 1. Backup. The checkpoint first is what makes the copy trustworthy: a
+  // database that was force-quit still has committed rows in its -wal, and
+  // copying the main file alone would leave them behind.
   emit({ phase: 'backup', message: 'Backing up your existing database…' })
+  checkpoint(livePath)
   copyFileSync(livePath, backupPath)
+  verifyBackup(livePath, backupPath)
 
   // 2. Apply Drizzle migrations against a fresh staging DB
   emit({ phase: 'migrate-schema', message: 'Preparing new database…' })
   const freshSqlite = new Database(stagingPath)
-  freshSqlite.pragma('journal_mode = WAL')
-  freshSqlite.pragma('synchronous = NORMAL')
-  const freshDrizzle = drizzle(freshSqlite, { schema })
-  migrate(freshDrizzle, { migrationsFolder })
+  try {
+    freshSqlite.pragma('journal_mode = WAL')
+    freshSqlite.pragma('synchronous = NORMAL')
+    migrate(drizzle(freshSqlite, { schema }), { migrationsFolder })
+  } catch (err) {
+    // migrate() throws when the packaged migrations folder is missing, which is
+    // a packaging regression rather than a user's doing. The swap has not begun
+    // so the live database is intact either way, but without this the handle
+    // stays open for the life of the process and the staging files are left for
+    // the next attempt to trip over.
+    freshSqlite.close()
+    removeDbFiles(stagingPath)
+    throw err
+  }
 
   // 3. Open legacy read-write so we can patch the OCR schema if needed
   const legacySqlite = new Database(backupPath)
@@ -229,16 +339,29 @@ export async function migrateLegacyDatabase(emit: Emit, migrationsFolder: string
   } catch (err) {
     legacySqlite.close()
     freshSqlite.close()
-    if (existsSync(stagingPath)) unlinkSync(stagingPath)
+    removeDbFiles(stagingPath)
     throw err
   }
 
   legacySqlite.close()
+  // Leaves the staging database in a single self-contained file, so the rename
+  // below moves all of it.
+  freshSqlite.pragma('wal_checkpoint(TRUNCATE)')
   freshSqlite.close()
 
-  // 4. Atomic swap: replace live DB with staging
+  // 4. Swap. Every step is a rename, so there is no instant where neither the
+  // original nor the migrated database is in place — a crash anywhere in here
+  // is recoverable by recoverInterruptedSwap() on the next launch.
   emit({ phase: 'swap', message: 'Finalizing migration…' })
-  // The original DB is still preserved at backupPath
-  unlinkSync(livePath)
+  renameSync(livePath, preSwapPath)
+  // The legacy log belongs to the database that just moved aside. Left here, it
+  // would be replayed into the migrated database and corrupt it.
+  for (const suffix of SIDECAR_SUFFIXES) {
+    const sidecar = livePath + suffix
+    if (existsSync(sidecar)) renameSync(sidecar, preSwapPath + suffix)
+  }
   renameSync(stagingPath, livePath)
+  removeDbFiles(stagingPath)
+  // Only now is the original redundant, and the .bak copy still preserves it.
+  removeDbFiles(preSwapPath)
 }

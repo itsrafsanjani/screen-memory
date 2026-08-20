@@ -13,6 +13,8 @@ import { autoUpdater } from 'electron-updater'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { StorageService } from './storage-service'
 import { CaptureService } from './capture-service'
+import { AppStateService } from './app-state-service'
+import { UsageService } from './usage-service'
 import { GitService } from './git-service'
 import { OcrService } from './ocr-service'
 import { AiService } from './ai-service'
@@ -21,18 +23,24 @@ import { pathToFileURL } from 'url'
 import { join } from 'path'
 import { closeDb } from './db/client'
 import { runMigrationsIfNeeded } from './db/migration-runner'
-import { getSetting } from './db/repositories/settings'
+import { getSetting, migrateApiKeyToSafeStorage } from './db/repositories/settings'
 import { deleteScreenshotsOlderThan } from './db/repositories/screenshots'
 import { deleteOcrOlderThan } from './db/repositories/ocr'
+import { deleteUsageOlderThan } from './db/repositories/app-usage'
+import { applyCaptureSettings } from './capture-settings'
 import { registerAllIpcHandlers } from './ipc'
 import { IPC } from '../shared/ipc-channels'
 import {
   DEFAULT_SCREENSHOT_RETENTION_DAYS,
   DEFAULT_OCR_RETENTION_DAYS,
+  DEFAULT_USAGE_RETENTION_DAYS,
   DEFAULT_GIT_SCAN_INTERVAL_MINUTES,
   DEFAULT_GIT_POLL_INTERVAL_MINUTES,
   MS_PER_DAY
 } from '../shared/constants'
+import { resolveExistingFileInsideRoot } from './path-containment'
+import { parseGitIntervalMinutes, parseRetentionDays } from './settings-validation'
+import { CSP_HEADER, registerSessionSecurity, registerWebContentsGuards } from './security'
 
 // Register custom protocol scheme before app ready
 protocol.registerSchemesAsPrivileged([
@@ -50,17 +58,11 @@ protocol.registerSchemesAsPrivileged([
 let tray: Tray | null = null
 let storage: StorageService
 let capture: CaptureService
+let appStateService: AppStateService
+let usageService: UsageService
 let gitService: GitService
 let ocrService: OcrService
 let aiService: AiService
-
-const CSP_HEADER =
-  "default-src 'self' screenmemory:; " +
-  "script-src 'self'; " +
-  "style-src 'self' 'unsafe-inline'; " +
-  "img-src 'self' data: screenmemory:; " +
-  "font-src 'self' data:; " +
-  "connect-src 'self' screenmemory:;"
 
 function loadTrayIcon(): Electron.NativeImage {
   const iconPath = app.isPackaged
@@ -127,10 +129,19 @@ function updateTrayMenu(): void {
 
 function registerProtocol(): void {
   protocol.handle('screenmemory', async (request) => {
-    const filePath = decodeURIComponent(request.url.replace('screenmemory://', ''))
-    const absolutePath = storage.getAbsolutePath(filePath)
+    let relativePath = ''
+    try {
+      relativePath = decodeURIComponent(
+        request.url.replace('screenmemory://', '').split(/[?#]/, 1)[0]
+      )
+    } catch {
+      return new Response('Bad request', { status: 400 })
+    }
+    const absolutePath = resolveExistingFileInsideRoot(storage.getBasePath(), relativePath)
+    if (!absolutePath) {
+      return new Response('Not found', { status: 404 })
+    }
     const response = await net.fetch(pathToFileURL(absolutePath).toString())
-    // Attach CSP header to every served asset response
     response.headers.set('Content-Security-Policy', CSP_HEADER)
     return response
   })
@@ -208,10 +219,14 @@ function createApplicationMenu(): void {
     {
       label: 'View',
       submenu: [
-        { role: 'reload' },
-        { role: 'forceReload' },
-        { role: 'toggleDevTools' },
-        { type: 'separator' },
+        ...(!app.isPackaged
+          ? ([
+              { role: 'reload' },
+              { role: 'forceReload' },
+              { role: 'toggleDevTools' },
+              { type: 'separator' }
+            ] as Electron.MenuItemConstructorOptions[])
+          : []),
         { role: 'resetZoom' },
         { role: 'zoomIn' },
         { role: 'zoomOut' },
@@ -235,6 +250,9 @@ function createApplicationMenu(): void {
 
 app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.screenmemory')
+
+  registerWebContentsGuards()
+  registerSessionSecurity()
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
@@ -271,27 +289,25 @@ app.whenReady().then(async () => {
     return
   }
 
+  migrateApiKeyToSafeStorage()
+
   // Init dependent services AFTER DB is ready
-  capture = new CaptureService(storage)
+  appStateService = new AppStateService()
+  appStateService.start()
+  capture = new CaptureService(storage, appStateService)
+  usageService = new UsageService(appStateService)
   gitService = new GitService()
   ocrService = new OcrService()
   aiService = new AiService()
 
-  // Apply capture settings
-  const activeMs = getSetting('capture.activeIntervalMs')
-  const idleMs = getSetting('capture.idleIntervalMs')
-  const quality = getSetting('capture.jpegQuality')
-  capture.updateIntervals(
-    activeMs ? parseInt(activeMs, 10) : undefined,
-    idleMs ? parseInt(idleMs, 10) : undefined,
-    quality ? parseInt(quality, 10) : undefined
-  )
+  // Apply capture settings (intervals, quality, excluded apps)
+  applyCaptureSettings(capture)
 
   // Stage 1: screenshot file + row retention
-  const screenshotRetentionDaysSetting = getSetting('storage.retentionDays')
-  const screenshotRetentionDays = screenshotRetentionDaysSetting
-    ? parseInt(screenshotRetentionDaysSetting, 10)
-    : DEFAULT_SCREENSHOT_RETENTION_DAYS
+  const screenshotRetentionDays = parseRetentionDays(
+    getSetting('storage.retentionDays'),
+    DEFAULT_SCREENSHOT_RETENTION_DAYS
+  )
   const screenshotCutoff = Date.now() - screenshotRetentionDays * MS_PER_DAY
   const removedDirs = storage.cleanupOldData(screenshotRetentionDays)
   if (removedDirs.length > 0) {
@@ -300,15 +316,22 @@ app.whenReady().then(async () => {
   }
 
   // Stage 2: OCR retention
-  const ocrRetentionDaysSetting = getSetting('storage.ocrRetentionDays')
-  const ocrRetentionDays = ocrRetentionDaysSetting
-    ? parseInt(ocrRetentionDaysSetting, 10)
-    : DEFAULT_OCR_RETENTION_DAYS
+  const ocrRetentionDays = parseRetentionDays(
+    getSetting('storage.ocrRetentionDays'),
+    DEFAULT_OCR_RETENTION_DAYS
+  )
   const effectiveOcrDays = Math.max(ocrRetentionDays, screenshotRetentionDays)
   const ocrCutoff = Date.now() - effectiveOcrDays * MS_PER_DAY
   const deletedOcr = deleteOcrOlderThan(ocrCutoff)
   if (deletedOcr > 0) {
     console.log(`Cleaned up ${deletedOcr} OCR rows`)
+  }
+
+  // Stage 3: app usage retention. Rows are tiny, so this is a fixed year
+  // rather than another user-facing setting.
+  const deletedUsage = deleteUsageOlderThan(Date.now() - DEFAULT_USAGE_RETENTION_DAYS * MS_PER_DAY)
+  if (deletedUsage > 0) {
+    console.log(`Cleaned up ${deletedUsage} app usage rows`)
   }
 
   // Wire OCR pipeline
@@ -342,8 +365,15 @@ app.whenReady().then(async () => {
     storage,
     git: gitService,
     ai: aiService,
+    appState: appStateService,
     onCaptureStatusChange: updateTrayMenu
   })
+
+  // Independent of capture: usage keeps accruing while recording is paused,
+  // and it needs no screen recording permission.
+  if (appStateService.isAvailable()) {
+    usageService.start()
+  }
 
   tray = new Tray(loadTrayIcon())
   tray.setToolTip('Screen Memory')
@@ -396,11 +426,15 @@ app.whenReady().then(async () => {
     updateTrayMenu()
   }
 
-  const scanInterval = getSetting('git.scanIntervalMinutes')
-  const pollInterval = getSetting('git.pollIntervalMinutes')
   gitService.start(
-    scanInterval ? parseInt(scanInterval, 10) : DEFAULT_GIT_SCAN_INTERVAL_MINUTES,
-    pollInterval ? parseInt(pollInterval, 10) : DEFAULT_GIT_POLL_INTERVAL_MINUTES
+    parseGitIntervalMinutes(
+      getSetting('git.scanIntervalMinutes'),
+      DEFAULT_GIT_SCAN_INTERVAL_MINUTES
+    ),
+    parseGitIntervalMinutes(
+      getSetting('git.pollIntervalMinutes'),
+      DEFAULT_GIT_POLL_INTERVAL_MINUTES
+    )
   )
 })
 
@@ -414,6 +448,9 @@ app.on('activate', () => {
 
 app.on('before-quit', () => {
   capture?.stop()
+  // Before closeDb(), since stopping writes the final segment end.
+  usageService?.stop()
+  appStateService?.stop()
   gitService?.stop()
   closeDb()
 })

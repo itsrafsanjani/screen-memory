@@ -15,6 +15,12 @@ Screen Memory is distributed via:
 - Write access to `itsrafsanjani/screen-memory` repository
 - Write access to `itsrafsanjani/homebrew-screen-memory` tap repository
 
+> **Releasing from a fork.** The `gh` commands below name the upstream repo explicitly. In a fork,
+> `gh` still resolves the default repo to upstream, so **every `gh` command needs `-R <owner>/screen-memory`
+> for your own fork** or it will read — and in the case of `gh release edit`, write — upstream instead.
+> The workflows themselves need no changes: both derive the publish target from `github.repository_owner`
+> and `github.event.repository.name`, so a fork releases to itself.
+
 ## Release Steps
 
 ### 1. Prepare the Release
@@ -45,24 +51,36 @@ git push origin main
 
 ### 3. Create Git Tag and Trigger Release
 
-Create an annotated tag to trigger the release workflow:
+This is the point of no return: a tag push publishes a live release, and the workflow refuses to
+overwrite one (see step 5). Make sure CI is green on the exact commit you are about to tag — it runs
+the same build, verify, sign and package sequence with `--publish never`, so a green CI run is a full
+dry run of the release.
+
+The tag must match `package.json`. The workflow reconciles the two and fails loudly if they differ,
+rather than quietly publishing the package.json version under a different tag name.
 
 ```bash
-# Delete existing tag if recreating (optional)
-git tag -d v0.0.1
-git push origin :refs/tags/v0.0.1
-
-# Create new annotated tag
+# Create an annotated tag
 git tag -a v0.0.1 -m "Release v0.0.1"
 
-# Push tag to trigger GitHub Actions workflow
+# Push it BY NAME to trigger the GitHub Actions workflow
 git push origin v0.0.1
 ```
 
+Push the tag **by name**, not with `git push --tags`. Every local tag matches the workflow's `v*`
+trigger, so `--tags` can start extra release runs for old versions — which then fail the
+version-match check above.
+
+Recreating a tag (`git tag -d` / `git push origin :refs/tags/...`) only works while the release is
+still a draft. Once a release is published, re-pushing the tag will not republish it; bump the
+version instead.
+
 The `.github/workflows/release.yml` workflow will automatically:
 
-- Build the Swift OCR binary
+- Build the Swift helper binaries (`screen-memory-ocr` and `screen-memory-appstate`)
 - Build the Electron app for macOS ARM64
+- Write the auto-updater feed (`app-update.yml`) into the bundle
+- Verify the packaged app carries its helpers, migrations and update feed
 - Ad-hoc sign the app bundle
 - Create DMG and ZIP artifacts
 - Publish to GitHub Releases
@@ -80,17 +98,33 @@ Or view at: https://github.com/itsrafsanjani/screen-memory/actions
 
 ### 5. Publish the Release
 
-If the release is created as a draft, publish it:
+A tag push publishes the release live — there is no draft step to complete. The release is only
+created as a draft when it is started manually from the Actions tab (`workflow_dispatch`) with the
+`draft` input left on. In that case, publish it with:
 
 ```bash
 gh release edit v0.0.1 --draft=false -R itsrafsanjani/screen-memory
 ```
 
-Verify the release assets:
+Because a tag push publishes directly, the workflow guards against clobbering a live release: if the
+tag already has a _published_ release it fails immediately rather than replacing its assets. A
+published version number cannot be reused — bump the version and tag again.
 
-- `Screen-Memory-{version}-arm64.dmg`
-- `Screen-Memory-{version}-arm64.zip`
+Verify the release assets — expect five:
+
+- `Screen-Memory-{version}-arm64.dmg` and its `.blockmap`
+- `Screen-Memory-{version}-arm64.zip` and its `.blockmap`
 - `latest-mac.yml` (required for auto-updates)
+
+```bash
+gh release view v0.0.1 -R itsrafsanjani/screen-memory --json assets --jq '.assets[].name'
+```
+
+The build is ad-hoc signed and never notarized, so a downloaded DMG is blocked by Gatekeeper. The
+release notes need to say so, or the app looks broken to everyone who downloads it:
+
+> Right-click the app and choose **Open**, or run
+> `xattr -dr com.apple.quarantine "/Applications/Screen Memory.app"`.
 
 ### 6. Update Homebrew Cask
 
@@ -200,18 +234,86 @@ If users report installation issues:
 
 The auto-updater requires:
 
-1. `latest-mac.yml` in the GitHub release
-2. Correct `electron-builder.yml` publish configuration
+1. `latest-mac.yml` in the GitHub release — the manifest the app checks against
+2. `Contents/Resources/app-update.yml` inside the packaged app — where the app learns which repo to
+   check. **electron-builder does not write this file for our build**: it only emits it during a pack
+   whose targets include `dmg`/`zip`, and the release runs `--dir` first and `--prepackaged` second,
+   neither of which qualifies. The workflows write it explicitly, and
+   `scripts/verify-packaged-app.sh` fails the build if it goes missing. Without it every update check
+   throws at startup and is swallowed by the error handler, so the symptom is silence, not an error.
 3. Valid version comparison (new version > current version)
+
+To check a built app:
+
+```bash
+cat "/Applications/Screen Memory.app/Contents/Resources/app-update.yml"
+```
+
+The `owner`/`repo` must name the repository the release was published to — a fork's build must point
+at the fork, not at upstream.
+
+### App Usage Not Being Recorded
+
+The Usage view is empty, or shows a single app that never changes.
+
+The helper reports the frontmost app from `NSWorkspace`, which AppKit refreshes from notifications
+delivered on the **run loop**. A helper that blocks its thread instead of running one reports
+whichever app was in front when it spawned, for its entire life — usually Screen Memory itself,
+which `UsageService` skips, so nothing is recorded at all. Nothing static catches this: the binary
+builds, spawns, and answers every request, and a one-shot invocation always answers correctly
+because the process is fresh.
+
+Check a build by watching a long-lived helper across a real app switch:
+
+```bash
+./scripts/check-appstate-liveness.sh swift-ocr/.build/release/screen-memory-appstate
+```
+
+Switch apps while it runs; it fails if the reported app never changes. The same freeze also empties
+the app-exclusion picker of anything launched after startup.
+
+### Screen Recording Permission Is Lost on Every Update
+
+Users have to re-grant Screen Recording after installing a new version, and capture stays broken
+until they do.
+
+macOS keys that permission to the app's **designated requirement**, not its bundle identifier. These
+builds are ad-hoc signed, which makes the requirement a bare content hash:
+
+```bash
+$ codesign -d -r- "/Applications/Screen Memory.app"
+# designated => cdhash H"e1fa482df20f9665b8465bf5c22031abe836a22a"
+```
+
+That hash changes with every build, so each release is a different app as far as TCC is concerned and
+the old grant no longer applies. Nothing in the app can carry the permission across — it is a
+property of how the bundle is signed.
+
+The fix is a **Developer ID certificate** (a paid Apple Developer account). Signing with one makes the
+designated requirement name the team rather than the bytes:
+
+```
+identifier "com.screenmemory.app" and anchor apple generic and
+  certificate leaf[subject.OU] = "<TEAMID>"
+```
+
+That is stable across builds, so the grant survives updates. It also removes the Gatekeeper
+right-click dance once the build is notarized. Until then, every release note must tell users to
+re-grant the permission, and the checklist item below covers it.
 
 ## Release Checklist
 
 - [ ] All tests passing
 - [ ] Version bumped in `package.json`
-- [ ] Git tag created and pushed (`vX.X.X`)
+- [ ] CI green on the exact commit being tagged
+- [ ] `./scripts/check-appstate-liveness.sh` passes (needs a human to switch apps; CI cannot run it)
+- [ ] Git tag matches the `package.json` version, created and pushed by name (`vX.X.X`)
 - [ ] GitHub Actions workflow completed successfully
 - [ ] Release published (not draft)
-- [ ] DMG and ZIP assets uploaded
+- [ ] DMG, ZIP, both blockmaps and `latest-mac.yml` uploaded
+- [ ] Release notes include the Gatekeeper workaround
+- [ ] Release notes tell users to re-grant Screen Recording (ad-hoc signing loses it every update)
+- [ ] DMG downloaded from the release page, mounted, and launched on real hardware
 - [ ] Homebrew cask updated with new version and SHA256
 - [ ] Installation tested via Homebrew
 - [ ] Auto-update tested (if applicable)
