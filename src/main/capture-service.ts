@@ -7,7 +7,11 @@ import {
   DEFAULT_ACTIVE_INTERVAL_MS,
   DEFAULT_EXCLUSION_COVERAGE_PERCENT,
   DEFAULT_IDLE_INTERVAL_MS,
-  DEFAULT_JPEG_QUALITY
+  DEFAULT_JPEG_QUALITY,
+  MAX_CAPTURE_INTERVAL_MS,
+  MAX_JPEG_QUALITY,
+  MIN_CAPTURE_INTERVAL_MS,
+  MIN_JPEG_QUALITY
 } from '../shared/constants'
 import type { DisplayWindow, ExcludedApp } from '../shared/types'
 
@@ -62,9 +66,21 @@ export class CaptureService {
   }
 
   updateIntervals(activeMs?: number, idleMs?: number, quality?: number): void {
-    if (activeMs !== undefined) this.activeIntervalMs = activeMs
-    if (idleMs !== undefined) this.idleIntervalMs = idleMs
-    if (quality !== undefined) this.jpegQuality = quality
+    if (activeMs !== undefined) {
+      this.activeIntervalMs = Math.min(
+        MAX_CAPTURE_INTERVAL_MS,
+        Math.max(MIN_CAPTURE_INTERVAL_MS, activeMs)
+      )
+    }
+    if (idleMs !== undefined) {
+      this.idleIntervalMs = Math.min(
+        MAX_CAPTURE_INTERVAL_MS,
+        Math.max(MIN_CAPTURE_INTERVAL_MS, idleMs)
+      )
+    }
+    if (quality !== undefined) {
+      this.jpegQuality = Math.min(MAX_JPEG_QUALITY, Math.max(MIN_JPEG_QUALITY, quality))
+    }
   }
 
   /**

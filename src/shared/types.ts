@@ -158,7 +158,7 @@ export interface ElectronAPI {
   getOcrText(screenshotId: number): Promise<string | null>
 
   // AI Summary
-  generateSummary(startMs: number, endMs: number): Promise<void>
+  generateSummary(startMs: number, endMs: number, includeOcr: boolean): Promise<void>
   onSummaryChunk(cb: (chunk: string) => void): () => void
   onSummaryDone(cb: () => void): () => void
   onSummaryError(cb: (error: string) => void): () => void

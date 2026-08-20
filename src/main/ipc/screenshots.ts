@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { clipboard, dialog, nativeImage, shell } from 'electron'
 import { copyFileSync, existsSync } from 'fs'
-import { basename, resolve, sep } from 'path'
+import { basename } from 'path'
 import { IPC } from '../../shared/ipc-channels'
 import {
   getAvailableDates,
@@ -12,6 +12,7 @@ import {
 } from '../db/repositories/screenshots'
 import type { StorageService } from '../storage-service'
 import { getTimelineWindow } from '../app-window'
+import { resolveInsideRoot } from '../path-containment'
 import { registerHandler } from './_helpers'
 
 const dateSchema = z.tuple([z.string()])
@@ -35,9 +36,8 @@ function withBooleanIdle(
  * to read arbitrary files through these handlers.
  */
 function resolveInsideStorage(storage: StorageService, relativePath: string): string {
-  const root = resolve(storage.getBasePath())
-  const absolute = resolve(storage.getAbsolutePath(relativePath))
-  if (absolute !== root && !absolute.startsWith(root + sep)) {
+  const absolute = resolveInsideRoot(storage.getBasePath(), relativePath)
+  if (!absolute) {
     throw new Error('Refusing to access a file outside the screenshot directory')
   }
   if (!existsSync(absolute)) {

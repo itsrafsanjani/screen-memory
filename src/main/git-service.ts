@@ -15,6 +15,7 @@ import {
   GIT_INITIAL_HISTORY_DAYS,
   MS_PER_DAY
 } from '../shared/constants'
+import { parseWatchDirs } from './settings-validation'
 
 const DEFAULT_WATCH_DIRS = ['Projects', 'Code', 'Developer', 'Desktop', 'Documents'].map((d) =>
   join(homedir(), d)
@@ -61,7 +62,7 @@ export class GitService {
 
   async scanRepos(): Promise<void> {
     const watchDirsStr = getSetting('git.watchDirs')
-    const watchDirs: string[] = watchDirsStr ? JSON.parse(watchDirsStr) : DEFAULT_WATCH_DIRS
+    const watchDirs: string[] = watchDirsStr ? parseWatchDirs(watchDirsStr) : DEFAULT_WATCH_DIRS
 
     for (const dir of watchDirs) {
       if (!existsSync(dir)) continue

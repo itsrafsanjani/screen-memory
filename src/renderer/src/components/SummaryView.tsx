@@ -3,6 +3,8 @@ import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
 import { Sparkles, Loader2, CalendarIcon, Copy, Check } from 'lucide-react'
 import { useSummary } from '../hooks/useSummary'
 import { useSummaryPeriod, type SummaryPeriod } from '../hooks/useSummaryPeriod'
@@ -34,11 +36,12 @@ export function SummaryView({ currentDate }: Props): React.JSX.Element {
     endMs
   } = useSummaryPeriod(currentDate)
   const [copied, setCopied] = useState(false)
+  const [includeOcr, setIncludeOcr] = useState(true)
   const { text, loading, error, generate } = useSummary()
 
   const handleGenerate = (): void => {
     setCopied(false)
-    void generate(startMs, endMs)
+    void generate(startMs, endMs, includeOcr)
   }
 
   const handleCopy = async (): Promise<void> => {
@@ -103,20 +106,39 @@ export function SummaryView({ currentDate }: Props): React.JSX.Element {
       </div>
 
       {/* Generate button */}
-      <div className="mb-4">
-        <Button size="sm" onClick={handleGenerate} disabled={loading}>
-          {loading ? (
-            <>
-              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-              Generating...
-            </>
-          ) : (
-            <>
-              <Sparkles className="h-3 w-3 mr-1" />
-              Generate Summary
-            </>
-          )}
-        </Button>
+      <div className="mb-4 flex flex-col gap-2">
+        <div className="flex items-center gap-3 flex-wrap">
+          <Button size="sm" onClick={handleGenerate} disabled={loading}>
+            {loading ? (
+              <>
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-3 w-3 mr-1" />
+                Generate Summary
+              </>
+            )}
+          </Button>
+          <div className="flex items-center gap-2">
+            <Switch
+              id="include-ocr"
+              size="sm"
+              checked={includeOcr}
+              onCheckedChange={setIncludeOcr}
+              disabled={loading}
+            />
+            <Label htmlFor="include-ocr" className="text-xs font-normal">
+              Include screen activity
+            </Label>
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground max-w-prose">
+          Generating a summary sends your git commits, app usage, and (if enabled) sampled on-screen
+          text to the configured AI provider. Secrets visible on screen may be included — they are
+          redacted when recognized, but redaction is not guaranteed.
+        </p>
       </div>
 
       {/* Error */}
