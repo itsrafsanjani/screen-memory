@@ -117,8 +117,8 @@ const api = {
   },
 
   // AI Summary
-  generateSummary(startMs: number, endMs: number): Promise<void> {
-    return invoke(IPC.ai.generateSummary, startMs, endMs)
+  generateSummary(startMs: number, endMs: number, includeOcr: boolean): Promise<void> {
+    return invoke(IPC.ai.generateSummary, startMs, endMs, includeOcr)
   },
   onSummaryChunk(cb: (chunk: string) => void): () => void {
     const handler = (_event: Electron.IpcRendererEvent, chunk: string): void => cb(chunk)

@@ -10,6 +10,7 @@ export function useSettings(): {
 } {
   const [settings, setSettings] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
+  const persisted = useRef<Record<string, string>>({})
 
   // Debounced writes keyed by setting key, so rapid edits (e.g. typing in a
   // textarea) coalesce into a single SQLite write instead of one per keystroke.
@@ -17,18 +18,33 @@ export function useSettings(): {
     new Map()
   )
 
+  const persist = useCallback(async (key: string, value: string): Promise<void> => {
+    try {
+      await window.electronAPI.setSetting(key, value)
+      persisted.current[key] = value
+    } catch (error) {
+      // Only roll back if nothing newer is queued for this key — otherwise a
+      // stale failure would clobber an edit the user has already made since.
+      if (!pending.current.has(key)) {
+        setSettings((prev) => ({ ...prev, [key]: persisted.current[key] ?? '' }))
+      }
+      console.error(error)
+    }
+  }, [])
+
   const flushAll = useCallback(() => {
     for (const [key, entry] of pending.current) {
       clearTimeout(entry.timer)
-      void window.electronAPI.setSetting(key, entry.value).catch(console.error)
+      void persist(key, entry.value)
     }
     pending.current.clear()
-  }, [])
+  }, [persist])
 
   useEffect(() => {
     window.electronAPI
       .getAllSettings()
       .then((s) => {
+        persisted.current = { ...s }
         setSettings(s)
         setLoading(false)
       })
@@ -45,19 +61,22 @@ export function useSettings(): {
     }
   }, [flushAll])
 
-  const updateSetting = useCallback(async (key: string, value: string) => {
-    // Optimistic in-memory update keeps controlled inputs responsive.
-    setSettings((prev) => ({ ...prev, [key]: value }))
+  const updateSetting = useCallback(
+    async (key: string, value: string) => {
+      // Optimistic in-memory update keeps controlled inputs responsive.
+      setSettings((prev) => ({ ...prev, [key]: value }))
 
-    const existing = pending.current.get(key)
-    if (existing) clearTimeout(existing.timer)
+      const existing = pending.current.get(key)
+      if (existing) clearTimeout(existing.timer)
 
-    const timer = setTimeout(() => {
-      pending.current.delete(key)
-      void window.electronAPI.setSetting(key, value).catch(console.error)
-    }, PERSIST_DEBOUNCE_MS)
-    pending.current.set(key, { value, timer })
-  }, [])
+      const timer = setTimeout(() => {
+        pending.current.delete(key)
+        void persist(key, value)
+      }, PERSIST_DEBOUNCE_MS)
+      pending.current.set(key, { value, timer })
+    },
+    [persist]
+  )
 
   const getSetting = useCallback(
     (key: string, defaultValue = ''): string => {

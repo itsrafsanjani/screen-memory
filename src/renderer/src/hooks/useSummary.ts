@@ -4,7 +4,7 @@ export function useSummary(): {
   text: string
   loading: boolean
   error: string | null
-  generate: (startMs: number, endMs: number) => Promise<void>
+  generate: (startMs: number, endMs: number, includeOcr: boolean) => Promise<void>
 } {
   const [text, setText] = useState('')
   const [loading, setLoading] = useState(false)
@@ -17,7 +17,7 @@ export function useSummary(): {
     }
   }, [])
 
-  const generate = useCallback(async (startMs: number, endMs: number) => {
+  const generate = useCallback(async (startMs: number, endMs: number, includeOcr: boolean) => {
     // Clean up previous listeners
     for (const cleanup of cleanupRef.current) cleanup()
     cleanupRef.current = []
@@ -50,7 +50,7 @@ export function useSummary(): {
     cleanupRef.current = [unsubChunk, unsubDone, unsubError, clearTimer]
 
     try {
-      await window.electronAPI.generateSummary(startMs, endMs)
+      await window.electronAPI.generateSummary(startMs, endMs, includeOcr)
     } catch (err) {
       clearTimer()
       console.error('Summary generation failed:', err)

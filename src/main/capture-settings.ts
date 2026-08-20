@@ -1,7 +1,12 @@
 import type { CaptureService } from './capture-service'
 import { getSetting } from './db/repositories/settings'
-import { DEFAULT_EXCLUSION_COVERAGE_PERCENT, MIN_CAPTURE_INTERVAL_MS } from '../shared/constants'
+import {
+  DEFAULT_EXCLUSION_COVERAGE_PERCENT,
+  MAX_CAPTURE_INTERVAL_MS,
+  MIN_CAPTURE_INTERVAL_MS
+} from '../shared/constants'
 import type { ExcludedApp } from '../shared/types'
+import { parseJpegQuality } from './settings-validation'
 
 /**
  * `capture.excludedApps` is stored as a JSON array of `{ bundleId, name }` so
@@ -32,16 +37,16 @@ export function parseCoveragePercent(raw: string | null): number {
 }
 
 /**
- * An interval goes straight to `setTimeout`, which clamps anything ≤ 0 to a
- * millisecond, so a mistyped `5` or `-1000` turns capture into a tight loop
- * that fills the disk and pegs a core. Undefined leaves the running value
- * alone, which is what a cleared field should do.
+ * An interval goes straight to `setTimeout`, which clamps anything ≤ 0 or
+ * above 2³¹−1 to 1 ms, so a mistyped or overflowing value turns capture into
+ * a tight loop that fills the disk and pegs a core. Undefined leaves the
+ * running value alone, which is what a cleared field should do.
  */
 export function parseIntervalMs(raw: string | null): number | undefined {
   if (!raw) return undefined
   const parsed = Number.parseInt(raw, 10)
   if (!Number.isFinite(parsed)) return undefined
-  return Math.max(MIN_CAPTURE_INTERVAL_MS, parsed)
+  return Math.min(MAX_CAPTURE_INTERVAL_MS, Math.max(MIN_CAPTURE_INTERVAL_MS, parsed))
 }
 
 /** Reads every `capture.*` setting and pushes it into the running service. */
@@ -52,7 +57,7 @@ export function applyCaptureSettings(capture: CaptureService): void {
   capture.updateIntervals(
     parseIntervalMs(activeMs),
     parseIntervalMs(idleMs),
-    quality ? parseInt(quality, 10) : undefined
+    parseJpegQuality(quality)
   )
   capture.setExclusion(
     parseExcludedApps(getSetting('capture.excludedApps')),
