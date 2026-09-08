@@ -14,27 +14,21 @@ export const CSP_HEADER =
   "base-uri 'self'; " +
   "frame-ancestors 'none';"
 
-// The renderer never needs any of these; capture goes through the Swift helpers
-// and the screencapture APIs in the main process instead. Anything not listed
-// (clipboard, for one — copy would break without it) is left allowed.
-const DENIED_PERMISSIONS = new Set<string>([
-  'media',
-  'geolocation',
-  'notifications',
-  'camera',
-  'microphone',
-  'display-capture'
-])
+// The renderer only ever needs to write to the clipboard (SummaryView's copy
+// button); capture goes through the Swift helpers and the screencapture APIs
+// in the main process instead. Everything else is denied by default so a
+// permission type nobody's audited can't slip through.
+const ALLOWED_PERMISSIONS = new Set<string>(['clipboard-sanitized-write'])
 
 export function registerSessionSecurity(): void {
   const defaultSession = session.defaultSession
 
   defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-    callback(!DENIED_PERMISSIONS.has(permission))
+    callback(ALLOWED_PERMISSIONS.has(permission))
   })
 
   defaultSession.setPermissionCheckHandler((_webContents, permission) => {
-    return !DENIED_PERMISSIONS.has(permission)
+    return ALLOWED_PERMISSIONS.has(permission)
   })
 
   // Dev only serves the renderer over Vite, whose HMR client needs a websocket
@@ -88,18 +82,15 @@ export function registerWebContentsGuards(): void {
     // schemes through the shell.
     contents.setWindowOpenHandler(() => ({ action: 'deny' }))
 
+    // DevTools itself is disabled via `webPreferences.devTools` on packaged
+    // windows, which blocks it regardless of trigger path; this only needs to
+    // stop reload from resetting in-memory state in a shipped build.
     if (app.isPackaged) {
       contents.on('before-input-event', (event, input) => {
         if (input.type !== 'keyDown') return
 
         const key = input.key.toLowerCase()
-        const isDevTools =
-          key === 'f12' ||
-          ((input.control || input.meta) && key === 'r') ||
-          (input.control && input.shift && (key === 'i' || key === 'j')) ||
-          (input.meta && input.alt && (key === 'i' || key === 'j'))
-
-        if (isDevTools) {
+        if ((input.control || input.meta) && key === 'r') {
           event.preventDefault()
         }
       })

@@ -224,11 +224,11 @@ export class CaptureService {
     if (!state || state.displays.length === 0) return null
 
     const byId = new Map(state.displays.map((d) => [d.displayId, d]))
-    if (displayIds.some((id) => byId.has(id))) return byId
+    if (displayIds.every((id) => byId.has(id))) return byId
 
     // Electron's macOS Display.id is the CGDirectDisplayID the helper reports,
-    // so this should not happen — but if it ever does, a single display can
-    // still be matched unambiguously.
+    // so this should not happen — but if any requested display's id is
+    // missing, exclusion can't be evaluated for it, so the whole cycle skips.
     if (!this.warnedDisplayIdMismatch) {
       this.warnedDisplayIdMismatch = true
       console.warn(
@@ -237,9 +237,6 @@ export class CaptureService {
         '- capture sources are:',
         displayIds.join(', ')
       )
-    }
-    if (displayIds.length === 1 && state.displays.length === 1) {
-      return new Map([[displayIds[0], state.displays[0]]])
     }
     return null
   }

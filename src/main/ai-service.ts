@@ -214,7 +214,7 @@ export class AiService {
         if (!row.text.trim()) continue
         ocrSamples.push({
           timestamp: row.timestamp,
-          text: sanitizeUntrustedScreenText(row.text).slice(0, 200)
+          text: sanitizeUntrustedScreenText(row.text.slice(0, 200))
         })
         lastSampledTs = row.timestamp
       }

@@ -1,4 +1,4 @@
-import { existsSync } from 'fs'
+import { existsSync, realpathSync } from 'fs'
 import { isAbsolute, resolve, sep } from 'path'
 
 /**
@@ -20,12 +20,26 @@ export function resolveInsideRoot(rootDir: string, relativePath: string): string
   return absolute
 }
 
-/** Same as {@link resolveInsideRoot}, but also returns null when the file is missing. */
+/**
+ * Same as {@link resolveInsideRoot}, but also returns null when the file is
+ * missing, or when a symlink inside the root resolves to a target outside it.
+ */
 export function resolveExistingFileInsideRoot(
   rootDir: string,
   relativePath: string
 ): string | null {
   const absolute = resolveInsideRoot(rootDir, relativePath)
   if (!absolute || !existsSync(absolute)) return null
+
+  let realRoot: string
+  let realTarget: string
+  try {
+    realRoot = realpathSync(rootDir)
+    realTarget = realpathSync(absolute)
+  } catch {
+    return null
+  }
+  if (realTarget !== realRoot && !realTarget.startsWith(realRoot + sep)) return null
+
   return absolute
 }

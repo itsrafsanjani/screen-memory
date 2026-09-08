@@ -57,6 +57,10 @@ jobs:
             VERSION="$PKG_VERSION"
           elif [ -n "$INPUT_VERSION" ]; then
             VERSION="${INPUT_VERSION#v}"
+            if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+              echo "::error::Invalid version '$INPUT_VERSION'. Expected SemVer 2.0, e.g. 1.2.3 or 1.2.3-beta.1."
+              exit 1
+            fi
           else
             VERSION="$PKG_VERSION"
           fi
@@ -105,10 +109,15 @@ jobs:
           TAG: ${{ needs.resolve.outputs.tag }}
         run: |
           set -euo pipefail
-          if ! STATE="$(gh release view "$TAG" --json isDraft --jq '.isDraft' 2>/dev/null)"; then
-            echo "No existing release for $TAG."
-            exit 0
+          if ! OUTPUT="$(gh release view "$TAG" --json isDraft --jq '.isDraft' 2>&1)"; then
+            if echo "$OUTPUT" | grep -qi 'release not found'; then
+              echo "No existing release for $TAG."
+              exit 0
+            fi
+            echo "::error::Failed to check for an existing release for $TAG: $OUTPUT"
+            exit 1
           fi
+          STATE="$OUTPUT"
           if [ "$STATE" = 'true' ]; then
             echo "A draft release for $TAG already exists; its assets will be replaced."
             exit 0

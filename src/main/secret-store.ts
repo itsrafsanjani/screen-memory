@@ -12,13 +12,17 @@ export function isEncryptedSecret(stored: string): boolean {
 
 /**
  * Encrypts a secret for storage in the settings table. When the OS keychain is
- * unavailable (headless Linux, locked keyring) the plaintext is returned so the
- * app keeps working — the repository layer is what keeps secrets out of the
- * renderer, not this encryption.
+ * unavailable (headless Linux, locked keyring) the write is refused instead of
+ * falling back to plaintext — callers propagate this as a normal validation
+ * failure rather than silently persisting an unencrypted key.
  */
 export function encryptSecret(plaintext: string): string {
   if (!plaintext) return ''
-  if (!safeStorage.isEncryptionAvailable()) return plaintext
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error(
+      'The OS keychain is unavailable, so the API key cannot be stored securely. Unlock your keychain and try again.'
+    )
+  }
   return PREFIX + safeStorage.encryptString(plaintext).toString('base64')
 }
 

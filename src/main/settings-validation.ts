@@ -18,6 +18,10 @@ const MAX_AI_MODEL_LENGTH = 200
 const MAX_AI_BASE_URL_LENGTH = 2048
 const MAX_AI_SUMMARY_PROMPT_LENGTH = 50_000
 const MAX_GIT_AUTHOR_EMAIL_LENGTH = 320
+const MAX_EXCLUDED_APPS_JSON_LENGTH = 100_000
+const MAX_EXCLUDED_APPS = 500
+const MAX_BUNDLE_ID_LENGTH = 256
+const MAX_APP_NAME_LENGTH = 256
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]'])
 const LOCAL_AI_PROVIDERS = new Set(['ollama', 'lmstudio'])
@@ -164,14 +168,21 @@ function requirePlainText(key: string, value: string, maxLength: number): string
  * is rejected here instead of being silently coerced to "nothing excluded".
  */
 function validateExcludedApps(value: string): string {
+  const bounded = requirePlainText('capture.excludedApps', value, MAX_EXCLUDED_APPS_JSON_LENGTH)
+
   let parsed: unknown
   try {
-    parsed = JSON.parse(value)
+    parsed = JSON.parse(bounded)
   } catch {
     throw new Error('Invalid value for capture.excludedApps: not valid JSON')
   }
   if (!Array.isArray(parsed)) {
     throw new Error('Invalid value for capture.excludedApps: expected an array')
+  }
+  if (parsed.length > MAX_EXCLUDED_APPS) {
+    throw new Error(
+      `Invalid value for capture.excludedApps: more than ${MAX_EXCLUDED_APPS} entries`
+    )
   }
 
   const apps = parsed.map((entry): ExcludedApp => {
@@ -179,11 +190,23 @@ function validateExcludedApps(value: string): string {
       throw new Error('Invalid value for capture.excludedApps: entries must be objects')
     }
     const { bundleId, name } = entry as { bundleId?: unknown; name?: unknown }
-    if (typeof bundleId !== 'string' || bundleId.length === 0) {
-      throw new Error('Invalid value for capture.excludedApps: bundleId must be a non-empty string')
+    if (
+      typeof bundleId !== 'string' ||
+      bundleId.length === 0 ||
+      bundleId.length > MAX_BUNDLE_ID_LENGTH ||
+      bundleId.includes('\0')
+    ) {
+      throw new Error(
+        `Invalid value for capture.excludedApps: bundleId must be a non-empty string up to ${MAX_BUNDLE_ID_LENGTH} characters`
+      )
     }
-    if (name !== undefined && typeof name !== 'string') {
-      throw new Error('Invalid value for capture.excludedApps: name must be a string')
+    if (
+      name !== undefined &&
+      (typeof name !== 'string' || name.length > MAX_APP_NAME_LENGTH || name.includes('\0'))
+    ) {
+      throw new Error(
+        `Invalid value for capture.excludedApps: name must be a string up to ${MAX_APP_NAME_LENGTH} characters`
+      )
     }
     return { bundleId, name: name && name.length > 0 ? name : bundleId }
   })
