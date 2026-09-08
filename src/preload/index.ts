@@ -5,6 +5,7 @@ import { unwrap, type Result } from '../shared/result'
 import type { MigrationProgress } from '../main/db/migration-runner'
 
 async function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
+  // SAFETY: Main process IPC handlers wrap responses in Result<T>
   const result = (await ipcRenderer.invoke(channel, ...args)) as Result<T>
   return unwrap(result)
 }

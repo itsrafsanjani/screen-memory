@@ -106,6 +106,7 @@ const TABLES: TableSpec[] = [
 function ensureOcrTimestampColumns(legacy: Database.Database): void {
   // Old DBs had ocr_results without timestamp/display_id/is_idle columns.
   // We rebuild that table inside the legacy DB BEFORE copy so SELECT works uniformly.
+  // SAFETY: PRAGMA table_info returns objects containing column name
   const cols = legacy.prepare('PRAGMA table_info(ocr_results)').all() as { name: string }[]
   if (cols.some((c) => c.name === 'timestamp')) return
 
@@ -135,6 +136,9 @@ function tableExists(db: Database.Database, name: string): boolean {
   return !!row
 }
 
+type SqliteValue = string | number | bigint | Buffer | null
+type SqliteRow = Record<string, SqliteValue>
+
 function copyTable(
   legacy: Database.Database,
   fresh: Database.Database,
@@ -143,6 +147,7 @@ function copyTable(
 ): void {
   if (!tableExists(legacy, table.name)) return
 
+  // SAFETY: SELECT COUNT(*) returns single row containing count numeric property c
   const countRow = legacy.prepare(`SELECT COUNT(*) as c FROM ${table.name}`).get() as {
     c: number
   }
@@ -159,11 +164,12 @@ function copyTable(
 
   let offset = 0
   while (offset < total) {
+    // SAFETY: SQLite SELECT returns raw row dictionaries matching column names
     const rows = legacy
       .prepare(
         `SELECT ${selectCols} FROM ${table.name} ORDER BY rowid ASC LIMIT ${COPY_BATCH} OFFSET ${offset}`
       )
-      .all() as Record<string, unknown>[]
+      .all() as SqliteRow[]
 
     if (rows.length === 0) break
 
@@ -182,9 +188,11 @@ function copyTable(
 function verifyCounts(legacy: Database.Database, fresh: Database.Database): void {
   for (const table of TABLES) {
     if (!tableExists(legacy, table.name)) continue
+    // SAFETY: SELECT COUNT(*) returns single row containing count numeric property c
     const legacyCount = (
       legacy.prepare(`SELECT COUNT(*) as c FROM ${table.name}`).get() as { c: number }
     ).c
+    // SAFETY: SELECT COUNT(*) returns single row containing count numeric property c
     const freshCount = (
       fresh.prepare(`SELECT COUNT(*) as c FROM ${table.name}`).get() as { c: number }
     ).c

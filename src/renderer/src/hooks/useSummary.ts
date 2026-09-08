@@ -1,11 +1,13 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 
-export function useSummary(): {
+export interface UseSummaryResult {
   text: string
   loading: boolean
   error: string | null
   generate: (startMs: number, endMs: number) => Promise<void>
-} {
+}
+
+export function useSummary(): UseSummaryResult {
   const [text, setText] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)

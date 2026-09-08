@@ -1,12 +1,12 @@
 import { ipcMain, type IpcMainInvokeEvent } from 'electron'
-import type { ZodType, ZodTuple } from 'zod'
+import type { ZodType } from 'zod'
 import { err, ok, toErrorMessage, type Result } from '../../shared/result'
 
 type HandlerFn<A extends unknown[], R> = (event: IpcMainInvokeEvent, ...args: A) => Promise<R> | R
 
 export function registerHandler<A extends unknown[], R>(
   channel: string,
-  schema: ZodTuple<ZodType[]> | null,
+  schema: ZodType<A> | null,
   handler: HandlerFn<A, R>
 ): void {
   ipcMain.handle(channel, async (event, ...rawArgs: unknown[]): Promise<Result<R>> => {
@@ -17,8 +17,9 @@ export function registerHandler<A extends unknown[], R>(
         if (!parsed.success) {
           return err(`Invalid arguments for ${channel}: ${parsed.error.message}`)
         }
-        args = parsed.data as unknown as A
+        args = parsed.data
       } else {
+        // SAFETY: Channel registered without validation schema forwards raw arguments directly
         args = rawArgs as A
       }
       const data = await handler(event, ...args)

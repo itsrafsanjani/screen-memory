@@ -97,12 +97,14 @@ export function getGitRepos(): GitRepoRow[] {
   }))
 }
 
+type GitRepoPatch = { isExcluded?: number; lastScanned?: number }
+
 export function updateGitRepo(
   id: number,
   data: { is_excluded?: number; last_scanned?: number }
 ): void {
   const db = getDb()
-  const patch: { isExcluded?: number; lastScanned?: number } = {}
+  const patch: GitRepoPatch = {}
   if (data.is_excluded !== undefined) patch.isExcluded = data.is_excluded
   if (data.last_scanned !== undefined) patch.lastScanned = data.last_scanned
   if (Object.keys(patch).length === 0) return

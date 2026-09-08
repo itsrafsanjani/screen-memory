@@ -27,7 +27,12 @@ export function getStagingPath(): string {
 let dbInstance: Db | null = null
 let sqliteInstance: Database.Database | null = null
 
-export function openDb(dbPath: string): { db: Db; sqlite: Database.Database } {
+export interface OpenDbResult {
+  db: Db
+  sqlite: Database.Database
+}
+
+export function openDb(dbPath: string): OpenDbResult {
   const sqlite = new Database(dbPath)
   sqlite.pragma('journal_mode = WAL')
   sqlite.pragma('synchronous = NORMAL')

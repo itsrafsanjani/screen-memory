@@ -13,7 +13,12 @@ export interface ScreenshotRow {
   is_idle: number
 }
 
-function dayStartEnd(dateStr: string): { start: number; end: number } {
+interface DayRange {
+  start: number
+  end: number
+}
+
+function dayStartEnd(dateStr: string): DayRange {
   const [year, month, day] = dateStr.split('-').map(Number)
   return {
     start: new Date(year, month - 1, day, 0, 0, 0, 0).getTime(),

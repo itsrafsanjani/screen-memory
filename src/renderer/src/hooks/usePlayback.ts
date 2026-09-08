@@ -4,11 +4,7 @@ import { findNearestScreenshot } from '../lib/time-utils'
 
 const SPEEDS = [1, 2, 5, 10, 30, 60]
 
-export function usePlayback(
-  screenshots: ScreenshotRecord[],
-  currentTimestamp: number | null,
-  setCurrentTimestamp: (ts: number) => void
-): {
+export interface UsePlaybackResult {
   isPlaying: boolean
   speed: number
   setSpeed: React.Dispatch<React.SetStateAction<number>>
@@ -19,7 +15,13 @@ export function usePlayback(
   skipBackward: () => void
   cycleSpeedUp: () => void
   cycleSpeedDown: () => void
-} {
+}
+
+export function usePlayback(
+  screenshots: ScreenshotRecord[],
+  currentTimestamp: number | null,
+  setCurrentTimestamp: (ts: number) => void
+): UsePlaybackResult {
   const [isPlaying, setIsPlaying] = useState(false)
   const [speed, setSpeed] = useState(1)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)

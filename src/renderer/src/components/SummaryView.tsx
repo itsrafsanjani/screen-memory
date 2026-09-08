@@ -5,7 +5,7 @@ import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Sparkles, Loader2, CalendarIcon, Copy, Check } from 'lucide-react'
 import { useSummary } from '../hooks/useSummary'
-import { useSummaryPeriod, type SummaryPeriod } from '../hooks/useSummaryPeriod'
+import { useSummaryPeriod } from '../hooks/useSummaryPeriod'
 
 interface Props {
   currentDate: string
@@ -71,7 +71,7 @@ export function SummaryView({ currentDate }: Props): React.JSX.Element {
             variant={period === preset ? 'default' : 'outline'}
             size="sm"
             className="text-xs h-7"
-            onClick={() => setPeriod(preset as SummaryPeriod)}
+            onClick={() => setPeriod(preset)}
           >
             {PRESET_LABELS[preset]}
           </Button>

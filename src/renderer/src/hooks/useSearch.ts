@@ -1,13 +1,15 @@
 import { useState, useCallback, useRef } from 'react'
 import type { OcrSearchResult } from '../../../types'
 
-export function useSearch(): {
+export interface UseSearchResult {
   query: string
   results: OcrSearchResult[]
   searching: boolean
   search: (q: string) => void
   clearSearch: () => void
-} {
+}
+
+export function useSearch(): UseSearchResult {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<OcrSearchResult[]>([])
   const [searching, setSearching] = useState(false)

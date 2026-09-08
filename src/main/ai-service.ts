@@ -5,6 +5,24 @@ import { getOcrByTimeRange } from './db/repositories/ocr'
 import { IPC } from '../shared/ipc-channels'
 import { DEFAULT_SUMMARY_PROMPT } from '../shared/prompts'
 
+interface AiErrorNode {
+  code?: string
+  status?: number
+  statusCode?: number
+  cause?: unknown
+  lastError?: unknown
+  errors?: unknown[]
+}
+
+function isErrorNode(cause: unknown): cause is AiErrorNode {
+  return cause !== null && typeof cause === 'object'
+}
+
+interface OpenAiClientConfig {
+  apiKey: string
+  baseURL?: string
+}
+
 export class AiService {
   async streamSummary(
     startMs: number,
@@ -96,42 +114,41 @@ export class AiService {
       }
       default: {
         const { createOpenAI } = await import('@ai-sdk/openai')
-        const openai = createOpenAI({
-          apiKey: apiKey!,
-          ...(baseUrl ? { baseURL: baseUrl } : {})
-        })
+        const openAiConfig: OpenAiClientConfig = { apiKey: apiKey! }
+        if (baseUrl) {
+          openAiConfig.baseURL = baseUrl
+        }
+        const openai = createOpenAI(openAiConfig)
         return openai(model)
       }
     }
   }
 
-  private getErrorMessage(err: unknown, provider: string): string {
-    const errMsg = err instanceof Error ? err.message : String(err)
+  private getErrorMessage(cause: unknown, provider: string): string {
+    const errMsg = cause instanceof Error ? cause.message : String(cause)
 
     // Walk the error tree to extract code/status from nested errors (AI SDK wraps errors).
     // RetryError uses `lastError` and `errors[]`, not just `cause`, so we visit those too.
     let errCode: string | undefined
     let statusCode: number | undefined
     const visited = new Set<unknown>()
-    const queue: unknown[] = [err]
+    const queue: unknown[] = [cause]
     while (queue.length > 0) {
       const current = queue.shift()
-      if (!current || typeof current !== 'object' || visited.has(current)) continue
+      if (!current || !isErrorNode(current) || visited.has(current)) continue
       visited.add(current)
 
-      if (!errCode) errCode = (current as { code?: string }).code
+      if (!errCode && current.code) {
+        errCode = current.code
+      }
       if (!statusCode) {
-        statusCode =
-          (current as { status?: number }).status || (current as { statusCode?: number }).statusCode
+        statusCode = current.status || current.statusCode
       }
 
       // Follow all paths the AI SDK uses to nest errors
-      const cause = (current as { cause?: unknown }).cause
-      const lastError = (current as { lastError?: unknown }).lastError
-      const errors = (current as { errors?: unknown[] }).errors
-      if (cause) queue.push(cause)
-      if (lastError) queue.push(lastError)
-      if (Array.isArray(errors)) queue.push(...errors)
+      if (current.cause) queue.push(current.cause)
+      if (current.lastError) queue.push(current.lastError)
+      if (Array.isArray(current.errors)) queue.push(...current.errors)
     }
 
     // Fallback: check the message string for common patterns

@@ -8,13 +8,13 @@ interface ShortcutActions {
   cycleSpeedDown: () => void
 }
 
-const KEY_TO_ACTION: Record<string, keyof ShortcutActions> = {
+const KEY_TO_ACTION = {
   ' ': 'toggle',
   ArrowLeft: 'skipBackward',
   ArrowRight: 'skipForward',
   ArrowUp: 'cycleSpeedUp',
   ArrowDown: 'cycleSpeedDown'
-}
+} satisfies Record<string, keyof ShortcutActions>
 
 const IGNORED_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT'])
 
@@ -27,6 +27,7 @@ export function useKeyboardShortcuts(actions: ShortcutActions): void {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent): void => {
+      // SAFETY: Keyboard event targets in DOM tree can be cast to HTMLElement to check tagName
       const tag = (e.target as HTMLElement | null)?.tagName
       if (tag && IGNORED_TAGS.has(tag)) return
 

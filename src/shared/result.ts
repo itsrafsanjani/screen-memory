@@ -8,11 +8,15 @@ export function err(error: string): Result<never> {
   return { success: false, error }
 }
 
-export function toErrorMessage(value: unknown): string {
-  if (value instanceof Error) return value.message
-  if (typeof value === 'string') return value
+function isString(cause: unknown): cause is string {
+  return typeof cause === 'string'
+}
+
+export function toErrorMessage(cause: unknown): string {
+  if (cause instanceof Error) return cause.message
+  if (isString(cause)) return cause
   try {
-    return JSON.stringify(value)
+    return JSON.stringify(cause)
   } catch {
     return 'Unknown error'
   }

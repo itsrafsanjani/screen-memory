@@ -20,12 +20,10 @@ export function setSetting(key: string, value: string): void {
     .run()
 }
 
-export function getAllSettings(): Record<string, string> {
+export type AppSettingsMap = Record<string, string>
+
+export function getAllSettings(): AppSettingsMap {
   const db = getDb()
   const rows = db.select().from(appSettings).all()
-  const out: Record<string, string> = {}
-  for (const row of rows) {
-    out[row.key] = row.value
-  }
-  return out
+  return Object.fromEntries(rows.map((row) => [row.key, row.value]))
 }

@@ -2,12 +2,14 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 
 const PERSIST_DEBOUNCE_MS = 400
 
-export function useSettings(): {
+export interface UseSettingsResult {
   settings: Record<string, string>
   loading: boolean
   updateSetting: (key: string, value: string) => Promise<void>
   getSetting: (key: string, defaultValue?: string) => string
-} {
+}
+
+export function useSettings(): UseSettingsResult {
   const [settings, setSettings] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
 

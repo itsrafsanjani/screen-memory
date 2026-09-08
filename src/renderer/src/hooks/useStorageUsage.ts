@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react'
 
-export function useStorageUsage(): { bytes: number | null; loading: boolean } {
+export interface UseStorageUsageResult {
+  bytes: number | null
+  loading: boolean
+}
+
+export function useStorageUsage(): UseStorageUsageResult {
   const [bytes, setBytes] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
 
