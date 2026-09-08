@@ -34,6 +34,13 @@ INTERVAL=1.5
   exit 1
 }
 
+case "$SECONDS_TO_RUN" in
+  '' | *[!0-9]*)
+    echo "::error::Second argument must be a whole number of seconds, got '$SECONDS_TO_RUN'"
+    exit 1
+    ;;
+esac
+
 WORK="$(mktemp -d)"
 FIFO="$WORK/commands"
 OUT="$WORK/replies"
@@ -72,7 +79,11 @@ Watching one long-lived helper for ${SECONDS_TO_RUN}s.
 
 EOF
 
-SAMPLES=$(python3 -c "print(int($SECONDS_TO_RUN / $INTERVAL))")
+# INTERVAL is 1.5s, so two samples cover three seconds. At least one sample is
+# always sent, otherwise a duration shorter than INTERVAL is misreported as
+# "answered nothing at all".
+SAMPLES=$(( SECONDS_TO_RUN * 2 / 3 ))
+[ "$SAMPLES" -ge 1 ] || SAMPLES=1
 for _ in $(seq 1 "$SAMPLES"); do
   # Stop as soon as the helper is gone rather than writing into a fifo nobody is
   # reading. Whatever it managed to say is diagnosed below.
@@ -95,7 +106,7 @@ for line in open(sys.argv[1]):
         continue
     try:
         front = (json.loads(line).get("frontmost") or {}).get("bundleId")
-    except ValueError:
+    except (ValueError, AttributeError):
         continue
     if front and front not in seen:
         seen.append(front)

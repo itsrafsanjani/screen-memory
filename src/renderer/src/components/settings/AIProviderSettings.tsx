@@ -123,8 +123,9 @@ export function AIProviderSettings({ getSetting, updateSetting }: Props): React.
             onChange={(e) => updateSetting('ai.baseUrl', e.target.value)}
           />
           <p className="text-xs text-muted-foreground">
-            Official OpenAI API, localhost, or a private LAN address for Ollama / LM Studio. Public
-            third-party hosts are rejected so the API key cannot be redirected off-box.
+            Official OpenAI API, localhost, or a private LAN address for Ollama / LM Studio. A LAN
+            address is a separate device on your network, and it does receive the API key. Public
+            third-party hosts are rejected so the key cannot be sent off your network.
           </p>
         </div>
       ) : null}

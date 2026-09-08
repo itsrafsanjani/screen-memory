@@ -67,6 +67,9 @@ export function ScreenshotViewer({
   // shortcuts have to stand down.
   useEffect(() => {
     onLightboxOpenChange?.(lightboxShot !== null)
+    // Unmounting while the lightbox is open must still clear the flag, or the
+    // parent keeps playback shortcuts disabled with no lightbox left to own them.
+    return () => onLightboxOpenChange?.(false)
   }, [lightboxShot, onLightboxOpenChange])
 
   let content: React.JSX.Element

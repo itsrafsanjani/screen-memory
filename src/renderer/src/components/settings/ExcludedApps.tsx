@@ -66,7 +66,13 @@ export function ExcludedApps({ getSetting, updateSetting }: Props): React.JSX.El
             if (!cancelled && seq >= applied) setRunningApps(apps)
           })
         })
-        .catch(console.error)
+        .catch((e) => {
+          console.error(e)
+          if (!cancelled && seq >= applied) {
+            applied = seq
+            setAvailable(false)
+          }
+        })
     }
 
     load()
