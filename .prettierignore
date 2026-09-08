@@ -5,4 +5,10 @@ LICENSE.md
 tsconfig.json
 tsconfig.*.json
 .agents/**
+.agent/**
+.claude/**
+.codex/**
+.commandcode/**
+.gemini/**
+tools/**
 src/renderer/src/components/ui/**
