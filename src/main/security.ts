@@ -14,10 +14,6 @@ export const CSP_HEADER =
   "base-uri 'self'; " +
   "frame-ancestors 'none';"
 
-// The renderer only ever needs to write to the clipboard (SummaryView's copy
-// button); capture goes through the Swift helpers and the screencapture APIs
-// in the main process instead. Everything else is denied by default so a
-// permission type nobody's audited can't slip through.
 const ALLOWED_PERMISSIONS = new Set<string>(['clipboard-sanitized-write'])
 
 export function registerSessionSecurity(): void {
@@ -31,8 +27,6 @@ export function registerSessionSecurity(): void {
     return ALLOWED_PERMISSIONS.has(permission)
   })
 
-  // Dev only serves the renderer over Vite, whose HMR client needs a websocket
-  // and inline eval that this policy forbids, so the header is packaged-only.
   if (app.isPackaged) {
     defaultSession.webRequest.onHeadersReceived((details, callback) => {
       callback({
@@ -56,7 +50,6 @@ function isAllowedRendererUrl(url: string): boolean {
     const parsed = new URL(url)
     if (parsed.protocol !== 'file:') return false
 
-    // Compiled main lives in out/main, the renderer bundle in out/renderer.
     const rendererRoot = resolve(join(__dirname, '../renderer'))
     const target = resolve(fileURLToPath(parsed))
     return target === rendererRoot || target.startsWith(rendererRoot + sep)
@@ -77,14 +70,8 @@ export function registerWebContentsGuards(): void {
       event.preventDefault()
     })
 
-    // Nothing in the renderer should open a window, and refusing to hand the URL
-    // to openExternal keeps a compromised renderer from launching arbitrary
-    // schemes through the shell.
     contents.setWindowOpenHandler(() => ({ action: 'deny' }))
 
-    // DevTools itself is disabled via `webPreferences.devTools` on packaged
-    // windows, which blocks it regardless of trigger path; this only needs to
-    // stop reload from resetting in-memory state in a shipped build.
     if (app.isPackaged) {
       contents.on('before-input-event', (event, input) => {
         if (input.type !== 'keyDown') return

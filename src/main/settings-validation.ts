@@ -67,12 +67,6 @@ function isLocalAiHost(hostname: string): boolean {
   return isLoopbackHost(hostname) || isPrivateIpv4(hostname) || isPrivateIpv6(hostname)
 }
 
-/**
- * The base URL decides where the API key is sent. Any public https host would
- * let a compromised renderer exfiltrate the key, so cloud providers may only
- * target the official API (or a loopback proxy). Local providers may use
- * loopback or RFC1918/link-local addresses, where no real key is sent.
- */
 export function isAllowedAiBaseUrl(value: string, provider?: string): boolean {
   if (!value.trim()) return true
 
@@ -96,8 +90,6 @@ export function isAllowedAiBaseUrl(value: string, provider?: string): boolean {
   if (provider) {
     return isLoopbackHost(host) || isOfficialCloud
   }
-  // IPC writes do not include the provider, so accept the union and let
-  // createModel re-check with the active provider before dialling.
   return isLocal || isOfficialCloud
 }
 
@@ -120,11 +112,6 @@ export function parseGitIntervalMinutes(raw: string | null, fallback: number): n
   return Math.min(MAX_GIT_INTERVAL_MINUTES, Math.max(MIN_GIT_INTERVAL_MINUTES, parsed))
 }
 
-/**
- * Watch dirs are handed to `find`, so a stored value that is malformed or holds
- * a relative path has to fail closed rather than throw — a bad row would
- * otherwise take down every scan.
- */
 export function parseWatchDirs(raw: string): string[] {
   let parsed: unknown
   try {
@@ -140,14 +127,6 @@ export function parseWatchDirs(raw: string): string[] {
   )
 }
 
-/**
- * A blank value means "unset" everywhere these settings are read (see
- * `parseIntervalMs`, `parseJpegQuality`, `parseCoveragePercent`,
- * `parseRetentionDays`, `parseGitIntervalMinutes`), including transiently
- * while a user is retyping a number field. Rejecting it here would make the
- * debounced write fail and roll the input back mid-edit, so it is passed
- * through unchanged rather than treated as invalid.
- */
 function parseIntInRange(key: string, value: string, min: number, max: number): string {
   if (!value.trim()) return value
   const parsed = Number.parseInt(value, 10)
@@ -163,11 +142,6 @@ function requirePlainText(key: string, value: string, maxLength: number): string
   return value
 }
 
-/**
- * Deliberately stricter than `parseExcludedApps`, which drops bad entries so a
- * corrupted row cannot break capture. A write is a chance to say no, so garbage
- * is rejected here instead of being silently coerced to "nothing excluded".
- */
 function validateExcludedApps(value: string): string {
   const bounded = requirePlainText('capture.excludedApps', value, MAX_EXCLUDED_APPS_JSON_LENGTH)
 
@@ -232,12 +206,6 @@ function validateWatchDirs(value: string): string {
   return JSON.stringify(dirs)
 }
 
-/**
- * Settings arrive over IPC as an untyped key/value pair, so the key itself is
- * attacker-controlled: without an allowlist a compromised renderer could write
- * any row the main process later trusts. Throws on an unknown key or an invalid
- * value; returns the sanitized string to persist.
- */
 export function validateSetting(key: string, value: string): string {
   switch (key) {
     case 'capture.activeIntervalMs':

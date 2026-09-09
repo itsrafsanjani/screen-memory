@@ -56,7 +56,6 @@ export interface RunningApp {
   name: string
 }
 
-/** An app the user has chosen to keep out of screenshots. */
 export type ExcludedApp = RunningApp
 
 export interface MigrationProgress {

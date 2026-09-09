@@ -16,9 +16,6 @@ const SECRET_PATTERNS: RegExp[] = [
   /\bBearer\s+[A-Za-z0-9\-._~+/]+=*/g
 ]
 
-// The screen-text delimiter, in both well-formed and truncated shapes. OCR text
-// is sliced to a fixed length, so a crafted tag can arrive without its closing
-// `>` and still read as a delimiter to the model.
 const DELIMITER_PATTERNS: RegExp[] = [
   /<\/?\s*untrusted-screen-text[^>]*>/gi,
   /<\/?\s*untrusted-screen-text/gi
