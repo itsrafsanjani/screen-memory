@@ -7,6 +7,11 @@
 export const DEFAULT_ACTIVE_INTERVAL_MS = 5_000
 export const DEFAULT_IDLE_INTERVAL_MS = 30_000
 export const DEFAULT_JPEG_QUALITY = 65
+export const MIN_CAPTURE_INTERVAL_MS = 250
+export const MAX_CAPTURE_INTERVAL_MS = 3_600_000
+
+export const MIN_JPEG_QUALITY = 1
+export const MAX_JPEG_QUALITY = 100
 
 // Idle detection (seconds of system inactivity before treating user as idle)
 export const IDLE_THRESHOLD_SECONDS = 120
@@ -20,10 +25,14 @@ export const GIT_REPO_CHECK_TIMEOUT_MS = 5_000
 export const GIT_LOG_TIMEOUT_MS = 30_000
 export const GIT_LOG_MAX_BUFFER = 10 * 1024 * 1024
 export const GIT_INITIAL_HISTORY_DAYS = 30
+export const MIN_GIT_INTERVAL_MINUTES = 1
+export const MAX_GIT_INTERVAL_MINUTES = 10_080
 
 // Retention (days)
 export const DEFAULT_SCREENSHOT_RETENTION_DAYS = 30
 export const DEFAULT_OCR_RETENTION_DAYS = 90
+export const MIN_RETENTION_DAYS = 1
+export const MAX_RETENTION_DAYS = 3650
 
 // Time helpers
 export const MS_PER_DAY = 24 * 60 * 60 * 1000

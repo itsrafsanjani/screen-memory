@@ -4,6 +4,7 @@ import { getCommitsByDateRange } from './db/repositories/git'
 import { getOcrByTimeRange } from './db/repositories/ocr'
 import { IPC } from '../shared/ipc-channels'
 import { DEFAULT_SUMMARY_PROMPT } from '../shared/prompts'
+import { sanitizeUntrustedScreenText } from './redact'
 
 interface AiErrorNode {
   code?: string
@@ -200,7 +201,7 @@ export class AiService {
       if (!row.text.trim()) continue
       ocrSamples.push({
         timestamp: row.timestamp,
-        text: row.text.slice(0, 200)
+        text: sanitizeUntrustedScreenText(row.text.slice(0, 200))
       })
       lastSampledTs = row.timestamp
     }

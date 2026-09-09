@@ -51,6 +51,13 @@ export interface OcrSearchResult {
   file_path: string | null
 }
 
+export interface RunningApp {
+  bundleId: string
+  name: string
+}
+
+export type ExcludedApp = RunningApp
+
 export interface MigrationProgress {
   phase:
     | 'idle'
