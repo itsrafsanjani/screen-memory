@@ -5,6 +5,7 @@ import type {
   GitCommit,
   GitRepo,
   OcrSearchResult,
+  AppUsageSegment,
   RunningApp
 } from '../types'
 import { IPC } from '../shared/ipc-channels'
@@ -47,6 +48,11 @@ const api = {
   },
   pickApplication(): Promise<RunningApp | null> {
     return invoke(IPC.apps.pickApplication)
+  },
+
+  // App usage
+  getAppUsage(date: string): Promise<AppUsageSegment[]> {
+    return invoke(IPC.usage.getByDate, date)
   },
 
   // Capture

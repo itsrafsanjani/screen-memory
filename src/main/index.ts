@@ -14,6 +14,7 @@ import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { StorageService } from './storage-service'
 import { CaptureService } from './capture-service'
 import { AppStateService } from './app-state-service'
+import { UsageService } from './usage-service'
 import { applyExclusionSettings } from './capture-settings'
 import { GitService } from './git-service'
 import { OcrService } from './ocr-service'
@@ -26,11 +27,13 @@ import { runMigrationsIfNeeded } from './db/migration-runner'
 import { getSetting } from './db/repositories/settings'
 import { deleteScreenshotsOlderThan } from './db/repositories/screenshots'
 import { deleteOcrOlderThan } from './db/repositories/ocr'
+import { deleteUsageOlderThan } from './db/repositories/app-usage'
 import { registerAllIpcHandlers } from './ipc'
 import { IPC } from '../shared/ipc-channels'
 import {
   DEFAULT_SCREENSHOT_RETENTION_DAYS,
   DEFAULT_OCR_RETENTION_DAYS,
+  DEFAULT_USAGE_RETENTION_DAYS,
   DEFAULT_GIT_SCAN_INTERVAL_MINUTES,
   DEFAULT_GIT_POLL_INTERVAL_MINUTES,
   MS_PER_DAY
@@ -53,6 +56,7 @@ let tray: Tray | null = null
 let storage: StorageService
 let capture: CaptureService
 let appStateService: AppStateService
+let usageService: UsageService
 let gitService: GitService
 let ocrService: OcrService
 let aiService: AiService
@@ -278,6 +282,7 @@ app.whenReady().then(async () => {
   appStateService = new AppStateService()
   appStateService.start()
   capture = new CaptureService(storage, appStateService)
+  usageService = new UsageService(appStateService)
   gitService = new GitService()
   ocrService = new OcrService()
   aiService = new AiService()
@@ -317,6 +322,11 @@ app.whenReady().then(async () => {
     console.log(`Cleaned up ${deletedOcr} OCR rows`)
   }
 
+  const deletedUsage = deleteUsageOlderThan(Date.now() - DEFAULT_USAGE_RETENTION_DAYS * MS_PER_DAY)
+  if (deletedUsage > 0) {
+    console.log(`Cleaned up ${deletedUsage} app usage rows`)
+  }
+
   // Wire OCR pipeline
   if (ocrService.isAvailable()) {
     capture.setCaptureCallback((job) => {
@@ -351,6 +361,10 @@ app.whenReady().then(async () => {
     appState: appStateService,
     onCaptureStatusChange: updateTrayMenu
   })
+
+  if (appStateService.isAvailable()) {
+    usageService.start()
+  }
 
   tray = new Tray(loadTrayIcon())
   tray.setToolTip('Screen Memory')
@@ -422,6 +436,7 @@ app.on('activate', () => {
 app.on('before-quit', () => {
   capture?.stop()
   appStateService?.stop()
+  usageService?.stop()
   gitService?.stop()
   closeDb()
 })

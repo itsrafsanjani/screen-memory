@@ -4,6 +4,7 @@ import type { GitService } from '../git-service'
 import type { AiService } from '../ai-service'
 import type { AppStateService } from '../app-state-service'
 import { registerScreenshotHandlers } from './screenshots'
+import { registerUsageHandlers } from './usage'
 import { registerAppsHandlers } from './apps'
 import { registerCaptureHandlers } from './capture'
 import { registerThemeHandlers } from './theme'
@@ -24,6 +25,7 @@ export interface IpcRegistryContext {
 
 export function registerAllIpcHandlers(ctx: IpcRegistryContext): void {
   registerScreenshotHandlers({ storage: ctx.storage })
+  registerUsageHandlers()
   registerAppsHandlers({ appState: ctx.appState })
   registerCaptureHandlers({ capture: ctx.capture, onStatusChange: ctx.onCaptureStatusChange })
   registerThemeHandlers()

@@ -75,6 +75,21 @@ export interface AppState {
   displays: DisplayWindow[]
 }
 
+export interface AppUsageSegment {
+  id: number
+  bundle_id: string
+  app_name: string
+  started_at: number
+  ended_at: number
+  duration_ms: number
+}
+
+export interface AppUsageTotal {
+  bundle_id: string
+  app_name: string
+  duration_ms: number
+}
+
 export interface MigrationProgress {
   phase:
     | 'idle'
@@ -102,6 +117,9 @@ export interface ElectronAPI {
     start: number,
     end: number
   ): Promise<{ deletedScreenshots: number; deletedOcr: number }>
+
+  // App usage
+  getAppUsage(date: string): Promise<AppUsageSegment[]>
 
   // Applications
   isAppStateAvailable(): Promise<boolean>

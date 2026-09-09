@@ -17,6 +17,9 @@ export const IPC = {
     pickApplication: 'apps:pick-application',
     isAvailable: 'apps:is-available'
   },
+  usage: {
+    getByDate: 'usage:get-by-date'
+  },
   theme: {
     getNative: 'theme:get-native',
     changed: 'theme:changed'
