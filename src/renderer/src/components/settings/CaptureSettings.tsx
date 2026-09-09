@@ -1,5 +1,7 @@
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Separator } from '@/components/ui/separator'
+import { ExcludedApps } from './ExcludedApps'
 
 interface Props {
   getSetting: (key: string, defaultValue?: string) => string
@@ -49,6 +51,10 @@ export function CaptureSettings({ getSetting, updateSetting }: Props): React.JSX
         />
         <p className="text-xs text-muted-foreground">1-100, lower = smaller files (default: 65)</p>
       </div>
+
+      <Separator />
+
+      <ExcludedApps getSetting={getSetting} updateSetting={updateSetting} />
     </div>
   )
 }
