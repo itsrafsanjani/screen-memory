@@ -1,5 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { ScreenshotRecord, DayBounds, GitCommit, GitRepo, OcrSearchResult } from '../types'
+import type {
+  ScreenshotRecord,
+  DayBounds,
+  GitCommit,
+  GitRepo,
+  OcrSearchResult,
+  AppUsageSegment,
+  RunningApp
+} from '../types'
 import { IPC } from '../shared/ipc-channels'
 import { unwrap, type Result } from '../shared/result'
 import type { MigrationProgress } from '../main/db/migration-runner'
@@ -29,6 +37,22 @@ const api = {
     end: number
   ): Promise<{ deletedScreenshots: number; deletedOcr: number }> {
     return invoke(IPC.screenshots.deleteRange, start, end)
+  },
+
+  // Applications
+  isAppStateAvailable(): Promise<boolean> {
+    return invoke(IPC.apps.isAvailable)
+  },
+  getRunningApps(): Promise<RunningApp[]> {
+    return invoke(IPC.apps.getRunning)
+  },
+  pickApplication(): Promise<RunningApp | null> {
+    return invoke(IPC.apps.pickApplication)
+  },
+
+  // App usage
+  getAppUsage(date: string): Promise<AppUsageSegment[]> {
+    return invoke(IPC.usage.getByDate, date)
   },
 
   // Capture
