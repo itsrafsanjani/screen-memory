@@ -56,11 +56,7 @@ function hourLabel(hour: number): string {
   return hour < 12 ? `${hour}a` : `${hour - 12}p`
 }
 
-function summarize(
-  segments: AppUsageSegment[],
-  start: number,
-  end: number
-) {
+function summarize(segments: AppUsageSegment[], start: number, end: number) {
   const byApp = new Map<string, AppTotal>()
   const buckets: Map<string, number>[] = HOURS.map(() => new Map())
 

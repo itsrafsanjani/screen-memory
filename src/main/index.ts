@@ -15,7 +15,7 @@ import { StorageService } from './storage-service'
 import { CaptureService } from './capture-service'
 import { AppStateService } from './app-state-service'
 import { UsageService } from './usage-service'
-import { applyExclusionSettings } from './capture-settings'
+import { applyExclusionSettings, parseIntervalMs, parseJpegQuality } from './capture-settings'
 import { GitService } from './git-service'
 import { OcrService } from './ocr-service'
 import { AiService } from './ai-service'
@@ -288,13 +288,10 @@ app.whenReady().then(async () => {
   aiService = new AiService()
 
   // Apply capture settings
-  const activeMs = getSetting('capture.activeIntervalMs')
-  const idleMs = getSetting('capture.idleIntervalMs')
-  const quality = getSetting('capture.jpegQuality')
   capture.updateIntervals(
-    activeMs ? parseInt(activeMs, 10) : undefined,
-    idleMs ? parseInt(idleMs, 10) : undefined,
-    quality ? parseInt(quality, 10) : undefined
+    parseIntervalMs(getSetting('capture.activeIntervalMs')),
+    parseIntervalMs(getSetting('capture.idleIntervalMs')),
+    parseJpegQuality(getSetting('capture.jpegQuality'))
   )
   applyExclusionSettings(capture)
 
