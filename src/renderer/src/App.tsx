@@ -9,6 +9,7 @@ import { useCaptureStatus } from './hooks/useCaptureStatus'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { useMigrationStatus } from './hooks/useMigrationStatus'
 import { DayPicker } from './components/DayPicker'
+import { UsageView } from './components/UsageView'
 import { PlaybackControls } from './components/PlaybackControls'
 import { SearchBar } from './components/SearchBar'
 import { SettingsDialog } from './components/Settings'
@@ -19,10 +20,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Separator } from '@/components/ui/separator'
-import { Settings, Sparkles, Monitor, MousePointer2, Scissors } from 'lucide-react'
+import { Settings, Sparkles, Monitor, Clock, MousePointer2, Scissors } from 'lucide-react'
 import type { ScreenshotRecord } from '../../types'
 
-type ViewMode = 'timeline' | 'summary'
+type ViewMode = 'timeline' | 'summary' | 'usage'
 
 function gitCommitsToScreenshotEntries(
   commits: ReturnType<typeof useGitCommits>
@@ -142,6 +143,15 @@ function App(): React.JSX.Element {
               <Button
                 variant="ghost"
                 size="sm"
+                className={`h-6 px-2.5 ${viewMode === 'usage' ? 'bg-background shadow-sm rounded-md' : ''}`}
+                onClick={() => setViewMode('usage')}
+                title="App Usage"
+              >
+                <Clock className="h-3 w-3" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
                 className={`h-6 px-2.5 ${viewMode === 'summary' ? 'bg-background shadow-sm rounded-md' : ''}`}
                 onClick={() => setViewMode('summary')}
                 title="AI Summary"
@@ -220,6 +230,8 @@ function App(): React.JSX.Element {
         {/* Main content area */}
         {viewMode === 'summary' ? (
           <SummaryView currentDate={currentDate} />
+        ) : viewMode === 'usage' ? (
+          <UsageView currentDate={currentDate} />
         ) : (
           <TimelineView
             loading={loading}

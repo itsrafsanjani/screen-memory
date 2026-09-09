@@ -19,6 +19,12 @@ export function formatTimeShort(timestampMs: number): string {
   return `${h12}:${m} ${ampm}`
 }
 
+export function isToday(dateStr: string): boolean {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const today = new Date()
+  return y === today.getFullYear() && m - 1 === today.getMonth() && d === today.getDate()
+}
+
 export function formatDateDisplay(dateStr: string): string {
   const [y, m, d] = dateStr.split('-').map(Number)
   const date = new Date(y, m - 1, d)

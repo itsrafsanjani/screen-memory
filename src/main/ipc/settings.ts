@@ -3,6 +3,7 @@ import { dialog } from 'electron'
 import { IPC } from '../../shared/ipc-channels'
 import { registerHandler } from './_helpers'
 import { getAllSettings, getSetting, setSetting } from '../db/repositories/settings'
+import { applyExclusionSettings, parseIntervalMs, parseJpegQuality } from '../capture-settings'
 import type { CaptureService } from '../capture-service'
 import type { StorageService } from '../storage-service'
 import { getTimelineWindow } from '../app-window'
@@ -22,14 +23,12 @@ export function registerSettingsHandlers(ctx: Ctx): void {
 
     // Apply settings changes live for capture-related keys
     if (key.startsWith('capture.')) {
-      const activeMs = getSetting('capture.activeIntervalMs')
-      const idleMs = getSetting('capture.idleIntervalMs')
-      const quality = getSetting('capture.jpegQuality')
       ctx.capture.updateIntervals(
-        activeMs ? parseInt(activeMs, 10) : undefined,
-        idleMs ? parseInt(idleMs, 10) : undefined,
-        quality ? parseInt(quality, 10) : undefined
+        parseIntervalMs(getSetting('capture.activeIntervalMs')),
+        parseIntervalMs(getSetting('capture.idleIntervalMs')),
+        parseJpegQuality(getSetting('capture.jpegQuality'))
       )
+      applyExclusionSettings(ctx.capture)
     }
   })
 

@@ -12,6 +12,14 @@ export const IPC = {
     getStatus: 'capture:get-status',
     statusChanged: 'capture:status-changed'
   },
+  apps: {
+    getRunning: 'apps:get-running',
+    pickApplication: 'apps:pick-application',
+    isAvailable: 'apps:is-available'
+  },
+  usage: {
+    getByDate: 'usage:get-by-date'
+  },
   theme: {
     getNative: 'theme:get-native',
     changed: 'theme:changed'

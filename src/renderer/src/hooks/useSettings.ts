@@ -12,25 +12,40 @@ export interface UseSettingsResult {
 export function useSettings(): UseSettingsResult {
   const [settings, setSettings] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
+  const persisted = useRef<Record<string, string>>({})
 
   // Debounced writes keyed by setting key, so rapid edits (e.g. typing in a
   // textarea) coalesce into a single SQLite write instead of one per keystroke.
-  const pending = useRef<Map<string, { value: string; timer: ReturnType<typeof setTimeout> }>>(
-    new Map()
-  )
+  const pending = useRef<
+    Map<string, { value: string; timer: ReturnType<typeof setTimeout>; revision: number }>
+  >(new Map())
+  const revision = useRef<Map<string, number>>(new Map())
+
+  const persist = useCallback(async (key: string, value: string, rev: number): Promise<void> => {
+    try {
+      await window.electronAPI.setSetting(key, value)
+      persisted.current[key] = value
+    } catch (error) {
+      if (revision.current.get(key) === rev) {
+        setSettings((prev) => ({ ...prev, [key]: persisted.current[key] ?? '' }))
+      }
+      console.error(error)
+    }
+  }, [])
 
   const flushAll = useCallback(() => {
     for (const [key, entry] of pending.current) {
       clearTimeout(entry.timer)
-      void window.electronAPI.setSetting(key, entry.value).catch(console.error)
+      void persist(key, entry.value, entry.revision)
     }
     pending.current.clear()
-  }, [])
+  }, [persist])
 
   useEffect(() => {
     window.electronAPI
       .getAllSettings()
       .then((s) => {
+        persisted.current = { ...s }
         setSettings(s)
         setLoading(false)
       })
@@ -47,19 +62,25 @@ export function useSettings(): UseSettingsResult {
     }
   }, [flushAll])
 
-  const updateSetting = useCallback(async (key: string, value: string) => {
-    // Optimistic in-memory update keeps controlled inputs responsive.
-    setSettings((prev) => ({ ...prev, [key]: value }))
+  const updateSetting = useCallback(
+    async (key: string, value: string) => {
+      // Optimistic in-memory update keeps controlled inputs responsive.
+      setSettings((prev) => ({ ...prev, [key]: value }))
 
-    const existing = pending.current.get(key)
-    if (existing) clearTimeout(existing.timer)
+      const rev = (revision.current.get(key) ?? 0) + 1
+      revision.current.set(key, rev)
 
-    const timer = setTimeout(() => {
-      pending.current.delete(key)
-      void window.electronAPI.setSetting(key, value).catch(console.error)
-    }, PERSIST_DEBOUNCE_MS)
-    pending.current.set(key, { value, timer })
-  }, [])
+      const existing = pending.current.get(key)
+      if (existing) clearTimeout(existing.timer)
+
+      const timer = setTimeout(() => {
+        pending.current.delete(key)
+        void persist(key, value, rev)
+      }, PERSIST_DEBOUNCE_MS)
+      pending.current.set(key, { value, timer, revision: rev })
+    },
+    [persist]
+  )
 
   const getSetting = useCallback(
     (key: string, defaultValue = ''): string => {

@@ -2,13 +2,85 @@ import Database from 'better-sqlite3'
 import { copyFileSync, existsSync, renameSync, unlinkSync } from 'fs'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
-import { getBackupPath, getDbPath, getStagingPath } from './client'
+import { getBackupPath, getDbPath, getPreSwapPath, getStagingPath } from './client'
 import type { MigrationProgress } from './migration-runner'
 import * as schema from './schema'
 
 type Emit = (progress: MigrationProgress) => void
 
 const COPY_BATCH = 5000
+
+const SIDECAR_SUFFIXES = ['-wal', '-shm']
+
+function removeDbFiles(path: string): void {
+  for (const candidate of [path, ...SIDECAR_SUFFIXES.map((suffix) => path + suffix)]) {
+    if (existsSync(candidate)) unlinkSync(candidate)
+  }
+}
+
+function checkpoint(path: string): void {
+  const sqlite = new Database(path)
+  try {
+    sqlite.pragma('wal_checkpoint(TRUNCATE)')
+  } finally {
+    sqlite.close()
+  }
+}
+
+function countRows(db: Database.Database, table: string): number {
+  // SAFETY: SELECT COUNT(*) returns single row containing count numeric property c
+  return (db.prepare(`SELECT COUNT(*) as c FROM ${table}`).get() as { c: number }).c
+}
+
+function verifyBackup(livePath: string, backupPath: string): void {
+  const live = new Database(livePath, { readonly: true, fileMustExist: true })
+  const backup = new Database(backupPath, { readonly: true, fileMustExist: true })
+  try {
+    for (const table of TABLES) {
+      if (!tableExists(live, table.name)) continue
+      const liveCount = countRows(live, table.name)
+      const backupCount = tableExists(backup, table.name) ? countRows(backup, table.name) : -1
+      if (liveCount !== backupCount) {
+        throw new Error(
+          `Backup verification failed for ${table.name}: original=${liveCount}, backup=${backupCount}`
+        )
+      }
+    }
+  } finally {
+    live.close()
+    backup.close()
+  }
+}
+
+export function recoverInterruptedSwap(): void {
+  const livePath = getDbPath()
+  const preSwapPath = getPreSwapPath()
+  const stagingPath = getStagingPath()
+
+  if (existsSync(livePath)) {
+    if (existsSync(preSwapPath)) removeDbFiles(preSwapPath)
+    return
+  }
+
+  if (existsSync(preSwapPath)) {
+    console.warn('Recovering interrupted migration: restoring the original database')
+    renameSync(preSwapPath, livePath)
+    for (const suffix of SIDECAR_SUFFIXES) {
+      const sidecar = preSwapPath + suffix
+      if (existsSync(sidecar)) renameSync(sidecar, livePath + suffix)
+    }
+    return
+  }
+
+  if (existsSync(stagingPath)) {
+    console.warn('Recovering interrupted migration: promoting the migrated database')
+    renameSync(stagingPath, livePath)
+    for (const suffix of SIDECAR_SUFFIXES) {
+      const sidecar = stagingPath + suffix
+      if (existsSync(sidecar)) renameSync(sidecar, livePath + suffix)
+    }
+  }
+}
 
 interface TableSpec {
   name: string
@@ -104,8 +176,6 @@ const TABLES: TableSpec[] = [
 ]
 
 function ensureOcrTimestampColumns(legacy: Database.Database): void {
-  // Old DBs had ocr_results without timestamp/display_id/is_idle columns.
-  // We rebuild that table inside the legacy DB BEFORE copy so SELECT works uniformly.
   // SAFETY: PRAGMA table_info returns objects containing column name
   const cols = legacy.prepare('PRAGMA table_info(ocr_results)').all() as { name: string }[]
   if (cols.some((c) => c.name === 'timestamp')) return
@@ -207,23 +277,28 @@ function verifyCounts(legacy: Database.Database, fresh: Database.Database): void
 export async function migrateLegacyDatabase(emit: Emit, migrationsFolder: string): Promise<void> {
   const livePath = getDbPath()
   const stagingPath = getStagingPath()
+  const preSwapPath = getPreSwapPath()
   const backupPath = getBackupPath()
 
-  if (existsSync(stagingPath)) unlinkSync(stagingPath)
+  removeDbFiles(stagingPath)
 
-  // 1. Backup
   emit({ phase: 'backup', message: 'Backing up your existing database…' })
+  checkpoint(livePath)
   copyFileSync(livePath, backupPath)
+  verifyBackup(livePath, backupPath)
 
-  // 2. Apply Drizzle migrations against a fresh staging DB
   emit({ phase: 'migrate-schema', message: 'Preparing new database…' })
   const freshSqlite = new Database(stagingPath)
-  freshSqlite.pragma('journal_mode = WAL')
-  freshSqlite.pragma('synchronous = NORMAL')
-  const freshDrizzle = drizzle(freshSqlite, { schema })
-  migrate(freshDrizzle, { migrationsFolder })
+  try {
+    freshSqlite.pragma('journal_mode = WAL')
+    freshSqlite.pragma('synchronous = NORMAL')
+    migrate(drizzle(freshSqlite, { schema }), { migrationsFolder })
+  } catch (err) {
+    freshSqlite.close()
+    removeDbFiles(stagingPath)
+    throw err
+  }
 
-  // 3. Open legacy read-write so we can patch the OCR schema if needed
   const legacySqlite = new Database(backupPath)
   legacySqlite.pragma('journal_mode = WAL')
 
@@ -237,16 +312,21 @@ export async function migrateLegacyDatabase(emit: Emit, migrationsFolder: string
   } catch (err) {
     legacySqlite.close()
     freshSqlite.close()
-    if (existsSync(stagingPath)) unlinkSync(stagingPath)
+    removeDbFiles(stagingPath)
     throw err
   }
 
   legacySqlite.close()
+  freshSqlite.pragma('wal_checkpoint(TRUNCATE)')
   freshSqlite.close()
 
-  // 4. Atomic swap: replace live DB with staging
   emit({ phase: 'swap', message: 'Finalizing migration…' })
-  // The original DB is still preserved at backupPath
-  unlinkSync(livePath)
+  renameSync(livePath, preSwapPath)
+  for (const suffix of SIDECAR_SUFFIXES) {
+    const sidecar = livePath + suffix
+    if (existsSync(sidecar)) renameSync(sidecar, preSwapPath + suffix)
+  }
   renameSync(stagingPath, livePath)
+  removeDbFiles(stagingPath)
+  removeDbFiles(preSwapPath)
 }
