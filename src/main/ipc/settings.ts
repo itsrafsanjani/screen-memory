@@ -3,6 +3,7 @@ import { dialog } from 'electron'
 import { IPC } from '../../shared/ipc-channels'
 import { registerHandler } from './_helpers'
 import { getAllSettings, getSetting, setSetting } from '../db/repositories/settings'
+import { applyExclusionSettings } from '../capture-settings'
 import type { CaptureService } from '../capture-service'
 import type { StorageService } from '../storage-service'
 import { getTimelineWindow } from '../app-window'
@@ -30,6 +31,7 @@ export function registerSettingsHandlers(ctx: Ctx): void {
         idleMs ? parseInt(idleMs, 10) : undefined,
         quality ? parseInt(quality, 10) : undefined
       )
+      applyExclusionSettings(ctx.capture)
     }
   })
 

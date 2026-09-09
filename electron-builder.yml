@@ -12,6 +12,8 @@ files:
 extraResources:
   - from: swift-ocr/.build/release/screen-memory-ocr
     to: bin/screen-memory-ocr
+  - from: swift-ocr/.build/release/screen-memory-appstate
+    to: bin/screen-memory-appstate
   - from: resources/iconTemplate.png
     to: iconTemplate.png
   - from: resources/iconTemplate@2x.png

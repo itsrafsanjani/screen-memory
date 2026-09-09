@@ -21,6 +21,14 @@ export const GIT_LOG_TIMEOUT_MS = 30_000
 export const GIT_LOG_MAX_BUFFER = 10 * 1024 * 1024
 export const GIT_INITIAL_HISTORY_DAYS = 30
 
+// Native app-state helper
+export const APP_STATE_REQUEST_TIMEOUT_MS = 2_000
+export const APP_STATE_CACHE_MS = 1_000
+export const APP_STATE_RESPAWN_BASE_DELAY_MS = 1_000
+export const APP_STATE_RESPAWN_MAX_DELAY_MS = 30_000
+
+export const DEFAULT_EXCLUSION_COVERAGE_PERCENT = 80
+
 // Retention (days)
 export const DEFAULT_SCREENSHOT_RETENTION_DAYS = 30
 export const DEFAULT_OCR_RETENTION_DAYS = 90

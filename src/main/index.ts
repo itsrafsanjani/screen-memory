@@ -13,6 +13,8 @@ import { autoUpdater } from 'electron-updater'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { StorageService } from './storage-service'
 import { CaptureService } from './capture-service'
+import { AppStateService } from './app-state-service'
+import { applyExclusionSettings } from './capture-settings'
 import { GitService } from './git-service'
 import { OcrService } from './ocr-service'
 import { AiService } from './ai-service'
@@ -50,6 +52,7 @@ protocol.registerSchemesAsPrivileged([
 let tray: Tray | null = null
 let storage: StorageService
 let capture: CaptureService
+let appStateService: AppStateService
 let gitService: GitService
 let ocrService: OcrService
 let aiService: AiService
@@ -272,7 +275,9 @@ app.whenReady().then(async () => {
   }
 
   // Init dependent services AFTER DB is ready
-  capture = new CaptureService(storage)
+  appStateService = new AppStateService()
+  appStateService.start()
+  capture = new CaptureService(storage, appStateService)
   gitService = new GitService()
   ocrService = new OcrService()
   aiService = new AiService()
@@ -286,6 +291,7 @@ app.whenReady().then(async () => {
     idleMs ? parseInt(idleMs, 10) : undefined,
     quality ? parseInt(quality, 10) : undefined
   )
+  applyExclusionSettings(capture)
 
   // Stage 1: screenshot file + row retention
   const screenshotRetentionDaysSetting = getSetting('storage.retentionDays')
@@ -342,6 +348,7 @@ app.whenReady().then(async () => {
     storage,
     git: gitService,
     ai: aiService,
+    appState: appStateService,
     onCaptureStatusChange: updateTrayMenu
   })
 
@@ -414,6 +421,7 @@ app.on('activate', () => {
 
 app.on('before-quit', () => {
   capture?.stop()
+  appStateService?.stop()
   gitService?.stop()
   closeDb()
 })
