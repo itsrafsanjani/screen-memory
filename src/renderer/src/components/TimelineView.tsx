@@ -1,5 +1,6 @@
 import { useMemo, type Dispatch, type SetStateAction } from 'react'
 import type { DayBounds, GitCommit, ScreenshotRecord } from '../../../types'
+import type { DisplayOption } from '../hooks/useDisplayFilter'
 import { ScreenshotViewer } from './ScreenshotViewer'
 import { Timeline } from './Timeline'
 import { DetailSidebar } from './DetailSidebar'
@@ -9,6 +10,7 @@ import type { RangeSelection } from '../hooks/useRangeSelection'
 interface Props {
   loading: boolean
   screenshots: ScreenshotRecord[]
+  displays: DisplayOption[]
   screenshotsWithCommits: ScreenshotRecord[]
   gitCommits: GitCommit[]
   dayBounds: DayBounds | null
@@ -21,11 +23,13 @@ interface Props {
   onSelectionChange: (selection: RangeSelection | null) => void
   onCancelSelection: () => void
   onDeleteRange: (start: number, end: number) => Promise<void>
+  onLightboxOpenChange: (open: boolean) => void
 }
 
 export function TimelineView({
   loading,
   screenshots,
+  displays,
   screenshotsWithCommits,
   gitCommits,
   dayBounds,
@@ -37,7 +41,8 @@ export function TimelineView({
   selection,
   onSelectionChange,
   onCancelSelection,
-  onDeleteRange
+  onDeleteRange,
+  onLightboxOpenChange
 }: Props): React.JSX.Element {
   const selectedCount = useMemo(() => {
     if (!selection) return 0
@@ -56,8 +61,10 @@ export function TimelineView({
         <div className="flex-1 flex min-h-0">
           <ScreenshotViewer
             screenshots={screenshots}
+            displays={displays}
             currentTimestamp={currentTimestamp}
             hoverTimestamp={hoverTimestamp}
+            onLightboxOpenChange={onLightboxOpenChange}
           />
           <DetailSidebar
             commits={gitCommits}

@@ -18,15 +18,18 @@ const KEY_TO_ACTION = {
 
 const IGNORED_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT'])
 
-export function useKeyboardShortcuts(actions: ShortcutActions): void {
+export function useKeyboardShortcuts(actions: ShortcutActions, disabled = false): void {
   const actionsRef = useRef(actions)
+  const disabledRef = useRef(disabled)
 
   useEffect(() => {
     actionsRef.current = actions
+    disabledRef.current = disabled
   })
 
   useEffect(() => {
     const handler = (e: KeyboardEvent): void => {
+      if (disabledRef.current) return
       // SAFETY: Keyboard event targets in DOM tree can be cast to HTMLElement to check tagName
       const tag = (e.target as HTMLElement | null)?.tagName
       if (tag && IGNORED_TAGS.has(tag)) return

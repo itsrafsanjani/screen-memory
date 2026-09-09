@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTimeline } from './hooks/useTimeline'
 import { useRangeSelection } from './hooks/useRangeSelection'
+import { useDisplayFilter } from './hooks/useDisplayFilter'
 import { usePlayback } from './hooks/usePlayback'
 import { useGitCommits } from './hooks/useGitCommits'
 import { useSearch } from './hooks/useSearch'
@@ -9,6 +10,7 @@ import { useCaptureStatus } from './hooks/useCaptureStatus'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { useMigrationStatus } from './hooks/useMigrationStatus'
 import { DayPicker } from './components/DayPicker'
+import { DisplayFilter } from './components/DisplayFilter'
 import { PlaybackControls } from './components/PlaybackControls'
 import { SearchBar } from './components/SearchBar'
 import { SettingsDialog } from './components/Settings'
@@ -58,15 +60,23 @@ function App(): React.JSX.Element {
 
   const gitCommits = useGitCommits(currentDate)
 
+  const {
+    displays,
+    selectedDisplayId,
+    setSelectedDisplayId,
+    filtered: visibleScreenshots
+  } = useDisplayFilter(screenshots)
+
   const screenshotsWithCommits = useMemo(() => {
-    if (gitCommits.length === 0) return screenshots
+    if (gitCommits.length === 0) return visibleScreenshots
     const commitEntries = gitCommitsToScreenshotEntries(gitCommits)
-    return [...screenshots, ...commitEntries].sort((a, b) => a.timestamp - b.timestamp)
-  }, [screenshots, gitCommits])
+    return [...visibleScreenshots, ...commitEntries].sort((a, b) => a.timestamp - b.timestamp)
+  }, [visibleScreenshots, gitCommits])
 
   const {
     isPlaying,
     speed,
+    stop,
     toggle,
     skipForward,
     skipBackward,
@@ -77,6 +87,7 @@ function App(): React.JSX.Element {
 
   const [hoverTimestamp, setHoverTimestamp] = useState<number | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('timeline')
+  const [lightboxOpen, setLightboxOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const { query, results, searching, search, clearSearch } = useSearch()
   const { isRecording, toggleRecording } = useCaptureStatus()
@@ -84,7 +95,18 @@ function App(): React.JSX.Element {
   const migration = useMigrationStatus()
 
   useTheme()
-  useKeyboardShortcuts({ toggle, skipForward, skipBackward, cycleSpeedUp, cycleSpeedDown })
+  useKeyboardShortcuts(
+    { toggle, skipForward, skipBackward, cycleSpeedUp, cycleSpeedDown },
+    lightboxOpen
+  )
+
+  const handleLightboxOpenChange = useCallback(
+    (open: boolean) => {
+      setLightboxOpen(open)
+      if (open) stop()
+    },
+    [stop]
+  )
 
   useEffect(() => {
     return window.electronAPI.onOpenSettings(() => setSettingsOpen(true))
@@ -149,6 +171,14 @@ function App(): React.JSX.Element {
                 <Sparkles className="h-3 w-3" />
               </Button>
             </div>
+
+            {viewMode === 'timeline' ? (
+              <DisplayFilter
+                displays={displays}
+                selectedDisplayId={selectedDisplayId}
+                onChange={setSelectedDisplayId}
+              />
+            ) : null}
           </div>
 
           <div className="no-drag absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
@@ -223,7 +253,8 @@ function App(): React.JSX.Element {
         ) : (
           <TimelineView
             loading={loading}
-            screenshots={screenshots}
+            screenshots={visibleScreenshots}
+            displays={displays}
             screenshotsWithCommits={screenshotsWithCommits}
             gitCommits={gitCommits}
             dayBounds={dayBounds}
@@ -236,6 +267,7 @@ function App(): React.JSX.Element {
             onSelectionChange={setSelection}
             onCancelSelection={clearSelection}
             onDeleteRange={handleDeleteRange}
+            onLightboxOpenChange={handleLightboxOpenChange}
           />
         )}
       </div>
