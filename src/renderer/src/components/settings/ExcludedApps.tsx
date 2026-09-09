@@ -24,8 +24,7 @@ function parseExcluded(raw: string): ExcludedApp[] {
     const parsed: unknown = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
     return parsed.filter(
-      (e): e is ExcludedApp =>
-        !!e && typeof e === 'object' && typeof e.bundleId === 'string'
+      (e): e is ExcludedApp => !!e && typeof e === 'object' && typeof e.bundleId === 'string'
     )
   } catch {
     return []
