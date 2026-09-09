@@ -4,7 +4,10 @@ export const IPC = {
     getAvailableDates: 'screenshots:get-available-dates',
     getDayBounds: 'screenshots:get-day-bounds',
     getByTimeRange: 'screenshots:get-by-time-range',
-    deleteRange: 'screenshots:delete-range'
+    deleteRange: 'screenshots:delete-range',
+    copyToClipboard: 'screenshots:copy-to-clipboard',
+    saveAs: 'screenshots:save-as',
+    revealInFinder: 'screenshots:reveal-in-finder'
   },
   capture: {
     start: 'capture:start',

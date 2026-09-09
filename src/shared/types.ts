@@ -78,6 +78,9 @@ export interface ElectronAPI {
     start: number,
     end: number
   ): Promise<{ deletedScreenshots: number; deletedOcr: number }>
+  copyScreenshotToClipboard(filePath: string): Promise<void>
+  saveScreenshotAs(filePath: string): Promise<string | null>
+  revealScreenshotInFinder(filePath: string): Promise<void>
 
   // Capture
   startCapture(): Promise<void>

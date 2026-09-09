@@ -30,6 +30,15 @@ const api = {
   ): Promise<{ deletedScreenshots: number; deletedOcr: number }> {
     return invoke(IPC.screenshots.deleteRange, start, end)
   },
+  copyScreenshotToClipboard(filePath: string): Promise<void> {
+    return invoke(IPC.screenshots.copyToClipboard, filePath)
+  },
+  saveScreenshotAs(filePath: string): Promise<string | null> {
+    return invoke(IPC.screenshots.saveAs, filePath)
+  },
+  revealScreenshotInFinder(filePath: string): Promise<void> {
+    return invoke(IPC.screenshots.revealInFinder, filePath)
+  },
 
   // Capture
   startCapture(): Promise<void> {
