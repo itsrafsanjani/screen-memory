@@ -1,4 +1,4 @@
-import { BrowserWindow } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 
@@ -30,7 +30,8 @@ export function createTimelineWindow(): BrowserWindow {
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
-      webSecurity: true
+      webSecurity: true,
+      devTools: !app.isPackaged
     }
   })
 

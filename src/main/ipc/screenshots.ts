@@ -10,6 +10,7 @@ import {
   type ScreenshotRow
 } from '../db/repositories/screenshots'
 import { deleteOcrInRange } from '../db/repositories/ocr'
+import { resolveExistingFileInsideRoot } from '../path-containment'
 import { registerHandler } from './_helpers'
 
 const dateSchema = z.tuple([z.string()])
@@ -19,6 +20,20 @@ function withBooleanIdle(
   row: ScreenshotRow
 ): Omit<ScreenshotRow, 'is_idle'> & { is_idle: boolean } {
   return { ...row, is_idle: !!row.is_idle }
+}
+
+/**
+ * Resolves a renderer-supplied *relative* screenshot path against the storage
+ * root, rejecting anything that escapes it. The renderer only ever holds
+ * relative paths, so a path that resolves outside is either a bug or an attempt
+ * to read arbitrary files through these handlers.
+ */
+export function resolveInsideStorage(storage: StorageService, relativePath: string): string {
+  const absolute = resolveExistingFileInsideRoot(storage.getBasePath(), relativePath)
+  if (!absolute) {
+    throw new Error('Could not access that screenshot file')
+  }
+  return absolute
 }
 
 export function registerScreenshotHandlers(ctx: { storage: StorageService }): void {

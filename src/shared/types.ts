@@ -51,6 +51,14 @@ export interface OcrSearchResult {
   file_path: string | null
 }
 
+export interface RunningApp {
+  bundleId: string
+  name: string
+}
+
+/** An app the user has chosen to keep out of screenshots. */
+export type ExcludedApp = RunningApp
+
 export interface MigrationProgress {
   phase:
     | 'idle'
