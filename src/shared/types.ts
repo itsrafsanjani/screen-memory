@@ -51,6 +51,30 @@ export interface OcrSearchResult {
   file_path: string | null
 }
 
+export interface RunningApp {
+  bundleId: string
+  name: string
+}
+
+export type ExcludedApp = RunningApp
+
+export interface DisplayWindow {
+  displayId: string
+  bundleId?: string
+  name?: string
+  coverage?: number
+  isFullscreen?: boolean
+}
+
+export interface AppState {
+  frontmost?: {
+    bundleId: string
+    name: string
+    pid: number
+  }
+  displays: DisplayWindow[]
+}
+
 export interface MigrationProgress {
   phase:
     | 'idle'
@@ -78,6 +102,11 @@ export interface ElectronAPI {
     start: number,
     end: number
   ): Promise<{ deletedScreenshots: number; deletedOcr: number }>
+
+  // Applications
+  isAppStateAvailable(): Promise<boolean>
+  getRunningApps(): Promise<RunningApp[]>
+  pickApplication(): Promise<RunningApp | null>
 
   // Capture
   startCapture(): Promise<void>
